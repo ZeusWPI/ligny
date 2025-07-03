@@ -1,10 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <title>{{ page.title }}</title>
-    </head>
-    <body>
-        <div>{{ table }}</div>
-        <div>{{ page.content }}</div>
-    </body>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page.title }}</title>
+</head>
+
+<body>
+    <header><a>Zeus</a> <nav><input type="text"></nav></header>
+    <div class="page">
+        <div class="content">
+            {{ table }}
+            {{ page.content }}
+        </div>
+    </div>
+</body>
+<style>
+    body {
+        margin: 0;
+        font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+    }
+
+    header {
+        display: flex;
+        color: white;
+        background-color: #ff7f00;
+        padding: 2rem 3rem;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    header a {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+
+    .page {
+        display: flex;
+        flex-grow: 1;
+        justify-content: center;
+    }
+
+    .content {
+        flex-grow: 1;
+        max-width: 70rem;
+        min-height: 100%;
+        padding-top: 3rem;
+    }
+</style>
+
 </html>
