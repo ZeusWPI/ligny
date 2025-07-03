@@ -2,8 +2,8 @@ use askama::Template;
 
 use crate::{
     errors::Error,
+    reader::{Page, Section},
     templates::{BaseTemplate, ContentTableTemplate},
-    Page, Section,
 };
 
 impl Page {

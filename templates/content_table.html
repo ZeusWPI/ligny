@@ -1,10 +1,8 @@
 <ul>
-  {% for child in root.children %}
-    {% match child %}
-      {% when Section with (section) %}
-        <li>{{ section.body.frontmatter.title }}</li>
-      {% when Page with (page) %}
-        <li>{{ page.frontmatter.title }}</li>
-    {% endmatch %}
-  {% endfor %}
+    {% for child in root.children %} {% match child %} {% when Section with
+    (section) %}
+    <li>{{ section.body.title }}</li>
+    {% when Page with (page) %}
+    <li>{{ page.title }}</li>
+    {% endmatch %} {% endfor %}
 </ul>

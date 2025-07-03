@@ -2,27 +2,17 @@ mod errors;
 mod render;
 mod templates;
 
-enum Node {
-    Section(Section),
-    Page(Page),
-}
+use std::path::Path;
 
-struct FrontMatter {
-    title: String,
-}
+use reader::read;
 
-struct Section {
-    children: Vec<Node>,
-    body: Page,
-}
+mod reader;
 
-struct Page {
-    frontmatter: FrontMatter,
-    content: String,
-    path: String,
+fn main() {
+    let section = read(Path::new("0_content/"));
+    let res = section.body.render(&section);
+    dbg!(res);
 }
-
-fn main() {}
 
 // markdown files -> parsing markdown to html -> converting to Nodes -> rendering page contents
 // using templates
