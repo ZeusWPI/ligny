@@ -1,12 +1,11 @@
 use std::{
     ffi::{OsStr, OsString},
-    fs::{read_dir, read_to_string, DirEntry, ReadDir},
+    fs::{read_dir, read_to_string, DirEntry},
     io::Result,
-    os::unix::fs::DirEntryExt,
     path::Path,
 };
 
-use markdown::{self, Constructs};
+use markdown::{self, ParseOptions};
 
 #[derive(Debug)]
 pub enum Node {
@@ -32,20 +31,27 @@ impl Section {
 #[derive(Debug)]
 pub struct Page {
     pub title: String,
-    pub path: OsString,
+    pub url: String,
     pub content: String,
 }
 
-pub fn read(path: &Path) -> Section {
+pub fn read(path: &Path, url: &str) -> Section {
     dbg!(path);
+    dbg!(&url);
     let index_path = path.join("index.md");
     let index = read_markdown(read_to_string(&index_path).unwrap());
     let (_, section_name) = filename_info(path.file_stem().unwrap());
 
+    let next_url = if url.is_empty() {
+        "".into()
+    } else {
+        format!("{}/{}", url, &section_name)
+    };
+
     // make section with index page
     let mut section = Section::new(Page {
-        title: section_name,
-        path: index_path.into_os_string(),
+        title: section_name.clone(),
+        url: next_url.to_string(),
         content: index,
     });
 
@@ -69,16 +75,16 @@ pub fn read(path: &Path) -> Section {
     for ((_, file_name), item) in files {
         let file_type = item.file_type().unwrap();
         if file_type.is_dir() {
-            let child_section = read(&item.path());
+            let child_section = read(&item.path(), &next_url);
             section.children.push(Node::Section(child_section));
         } else if file_type.is_file() {
             let text = read_to_string(item.path()).unwrap();
             let page_body = read_markdown(text);
 
             section.children.push(Node::Page(Page {
-                title: file_name,
+                title: file_name.clone(),
+                url: format!("{}/{}", next_url, &file_name),
                 content: page_body,
-                path: item.path().into_os_string(),
             }));
         }
     }
@@ -87,7 +93,6 @@ pub fn read(path: &Path) -> Section {
 }
 
 fn filename_info(filename: &OsStr) -> (u32, String) {
-    dbg!(&filename);
     let filename = filename.to_str().unwrap();
     let mut filename_parts = filename.split("_");
 
