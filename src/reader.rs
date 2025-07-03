@@ -43,7 +43,7 @@ pub fn read(path: &Path, url: &str) -> Section {
     let (_, section_name) = filename_info(path.file_stem().unwrap());
 
     let next_url = if url.is_empty() {
-        "".into()
+        ".".into()
     } else {
         format!("{}/{}", url, &section_name)
     };
