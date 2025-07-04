@@ -5,7 +5,11 @@ use std::{
     path::Path,
 };
 
-use markdown::{self};
+use markdown_ppp::{
+    self,
+    html_printer::{config::Config, render_html},
+    parser::parse_markdown,
+};
 
 #[derive(Debug)]
 pub enum Node {
@@ -103,15 +107,7 @@ fn filename_info(filename: &OsStr) -> (u32, String) {
 }
 
 fn read_markdown(content: String) -> String {
-    let mut parse_options = markdown::ParseOptions::default();
-    parse_options.constructs.frontmatter = true;
-
-    markdown::to_html_with_options(
-        &content,
-        &markdown::Options {
-            parse: parse_options,
-            ..Default::default()
-        },
-    )
-    .expect("cant read index")
+    let state = markdown_ppp::parser::MarkdownParserState::default();
+    let doc = parse_markdown(state, &content).expect("failed to parse markdown");
+    render_html(&doc, Config::default())
 }
