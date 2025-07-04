@@ -1,8 +1,10 @@
 <ul>
-    {% for child in root.children %} {% match child %} {% when Section with
-    (section) %}
-      <li><a href="{{section.body.url}}">{{ section.body.title }} </a> </li>
-    {% when Page with (page) %}
-      <li><a href="{{page.url}}">{{ page.title }} </a> </li>
-    {% endmatch %} {% endfor %}
+    {% for child in root.children %} 
+      {% match child %} 
+        {% when Section with (section) %}
+          <li><a href="{{section.body.loc.url()}}">{{ section.body.title }} </a> </li>
+        {% when Page with (page) %}
+          <li><a href="{{page.loc.url()}}">{{ page.title }} </a> </li>
+      {% endmatch %} 
+    {% endfor %}
 </ul>

@@ -1,20 +1,26 @@
 use std::{
-    fs::{create_dir_all, File},
+    collections::HashMap,
+    fs::{File, create_dir_all},
     io::Write,
-    path::Path,
+    sync::Mutex,
 };
 
 use askama::Template;
 
 use crate::{
-    config::Config,
     errors::Error,
+    locator::Locator,
     reader::{Node, Page, Section},
     templates::{BaseTemplate, ContentTableTemplate},
 };
 
+use std::sync::LazyLock;
+
+pub static RENDERS: LazyLock<Mutex<HashMap<String, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 impl Page {
-    pub fn build(&self, root: &Section) -> Result<(), Error> {
+    pub fn render(&self, root: &Section) -> Result<(), Error> {
         let content_table = ContentTableTemplate { root, page: self };
 
         let html = BaseTemplate {
@@ -24,32 +30,20 @@ impl Page {
         .render()
         .map_err(Error::from)?;
 
-        let path =
-            Path::new(&Config::get().public).join(self.url.strip_prefix("/").unwrap_or(&self.url));
-        create_dir_all(&path).map_err(Error::from)?;
+        let mut renders = RENDERS.lock().unwrap();
+        renders.insert(self.loc.url(), html);
 
-        let out_path = path.join("index.html");
-        let mut file = File::create(&out_path).map_err(Error::from)?;
-
-        file.write_all(html.as_bytes()).map_err(|e| Error::Build {
-            message: e.to_string(),
-        })?;
-
-        println!(
-            "Build page {} to {}",
-            self.title,
-            out_path.to_str().unwrap()
-        );
+        println!("Rendered page {} for url {}", self.title, self.loc.url());
 
         Ok(())
     }
 }
 
 impl Section {
-    pub fn build(&self, root: &Section) -> Result<(), Error> {
-        self.body.build(root)?;
+    pub fn render(&self, root: &Section) -> Result<(), Error> {
+        self.body.render(root)?;
         for child in self.children.iter() {
-            child.build(root)?;
+            child.render(root)?;
         }
 
         Ok(())
@@ -57,10 +51,29 @@ impl Section {
 }
 
 impl Node {
-    pub fn build(&self, root: &Section) -> Result<(), Error> {
+    pub fn render(&self, root: &Section) -> Result<(), Error> {
         match self {
-            Node::Section(section) => section.build(root),
-            Node::Page(page) => page.build(root),
+            Node::Section(section) => section.render(root),
+            Node::Page(page) => page.render(root),
         }
     }
+}
+
+pub fn build() -> Result<(), Error> {
+    let renders = RENDERS.lock().unwrap();
+
+    for (url, html) in renders.iter() {
+        let loc = Locator::from_url(url);
+        create_dir_all(loc.public_dir()).map_err(Error::from)?;
+
+        let mut file = File::create(loc.public_path()).map_err(Error::from)?;
+
+        file.write_all(html.as_bytes()).map_err(|e| Error::Build {
+            message: e.to_string(),
+        })?;
+
+        println!("Build page {} to {}", url, loc.public_path());
+    }
+
+    Ok(())
 }

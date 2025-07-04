@@ -3,28 +3,25 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::path::Path;
 
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
-use hyper::body::Bytes;
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
+use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::Method;
 use hyper::Request;
 use hyper::Response;
 use hyper::StatusCode;
+use hyper::body::Bytes;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
-use crate::build;
 use crate::Config;
 use crate::Error;
+use crate::render::RENDERS;
 
 pub async fn serve() -> Result<(), Error> {
-    build()?;
-    println!("Build complete");
-
     let addr: SocketAddr = SocketAddr::from((Config::get().address, Config::get().port));
 
-    println!("Listening on {}", addr);
+    println!("Listening on {addr}");
 
     let listener = TcpListener::bind(addr).await?;
     loop {
@@ -35,7 +32,7 @@ pub async fn serve() -> Result<(), Error> {
             .serve_connection(io, service_fn(reponse))
             .await
         {
-            print!("Failed to serve connection: {:?}", err);
+            print!("Failed to serve connection: {err:?}");
         }
     }
 }
@@ -44,7 +41,7 @@ async fn reponse(
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<BoxBody<Bytes, std::io::Error>>, Error> {
     match (req.method(), req.uri().path()) {
-        (&Method::GET, path) => file_send(path).await,
+        (&Method::GET, path) => page_send(path).await,
         _ => not_found(),
     }
 }
@@ -60,23 +57,18 @@ fn not_found() -> Result<Response<BoxBody<Bytes, std::io::Error>>, Error> {
         .map_err(Error::from)
 }
 
-async fn file_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>, Error> {
-    let path = Path::new(&Config::get().public)
-        .join(url.strip_prefix("/").unwrap_or(url))
-        .join("index.html");
+async fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>, Error> {
+    let renders = RENDERS.lock().unwrap();
 
-    let file = File::open(path);
-
-    match file {
-        Ok(mut f) => {
-            let mut body: String = String::new();
-            f.read_to_string(&mut body)?;
-
-            Response::builder()
-                .status(StatusCode::OK)
-                .body(Full::new(body.into()).map_err(|e| match e {}).boxed())
-                .map_err(Error::from)
-        }
-        Err(_) => not_found(),
+    match renders.get(url) {
+        Some(page) => Response::builder()
+            .status(StatusCode::OK)
+            .body(
+                Full::new(page.clone().into())
+                    .map_err(|e| match e {})
+                    .boxed(),
+            )
+            .map_err(Error::from),
+        None => not_found(),
     }
 }

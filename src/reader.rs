@@ -1,8 +1,10 @@
 use std::{
+    collections::HashMap,
     ffi::OsStr,
-    fs::{read_dir, read_to_string, DirEntry},
+    fs::{DirEntry, read_dir, read_to_string},
     io::Result,
-    path::Path,
+    path::{Path, PathBuf},
+    sync::{LazyLock, Mutex},
 };
 
 use markdown_ppp::{
@@ -11,51 +13,98 @@ use markdown_ppp::{
     parser::parse_markdown,
 };
 
-#[derive(Debug)]
+use std::sync::Arc;
+
+use crate::locator::Locator;
+
+type ThreadNodeType = Arc<Mutex<ThreadNode>>;
+
+#[derive(Debug, Clone)]
+pub enum ThreadNode {
+    Section(ThreadSection),
+    Page(Page),
+}
+
+#[derive(Debug, Clone)]
 pub enum Node {
     Section(Section),
     Page(Page),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct ThreadSection {
+    pub children: Vec<ThreadNodeType>,
+    pub body: Page,
+}
+
+#[derive(Debug, Clone)]
 pub struct Section {
     pub children: Vec<Node>,
     pub body: Page,
 }
 
-impl Section {
-    pub fn new(body: Page) -> Section {
-        Section {
+impl ThreadSection {
+    pub fn new(body: Page) -> ThreadSection {
+        ThreadSection {
             children: Vec::new(),
             body,
         }
     }
 }
 
-#[derive(Debug)]
+impl From<ThreadSection> for Section {
+    fn from(thread_section: ThreadSection) -> Self {
+        let extracted_children: Vec<Node> = thread_section
+            .children
+            .iter()
+            .map(|n| n.lock().unwrap().to_owned().into())
+            .collect();
+        Section {
+            children: extracted_children,
+            body: thread_section.body,
+        }
+    }
+}
+
+impl From<ThreadNode> for Node {
+    fn from(thread_node: ThreadNode) -> Self {
+        match thread_node {
+            ThreadNode::Section(section) => Node::Section(section.into()),
+            ThreadNode::Page(page) => Node::Page(page),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Page {
     pub title: String,
-    pub url: String,
+    pub loc: Locator,
     pub content: String,
 }
 
-pub fn read(path: &Path, url: &str) -> Section {
+pub static READS: LazyLock<Mutex<HashMap<PathBuf, ThreadNodeType>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub fn read(
+    path: &Path,
+    loc: &Locator,
+    reads: &mut HashMap<PathBuf, ThreadNodeType>,
+) -> ThreadSection {
     dbg!(path);
-    dbg!(&url);
     let index_path = path.join("index.md");
     let index = read_markdown(read_to_string(&index_path).unwrap());
     let (_, section_name) = filename_info(path.file_stem().unwrap());
 
-    let next_url = if url.is_empty() {
-        ".".into()
+    let next_loc = if path.eq(Path::new(&crate::config::Config::get().content)) {
+        loc.clone()
     } else {
-        format!("{}/{}", url, &section_name)
+        loc.join(&Locator::new(&section_name))
     };
 
     // make section with index page
-    let mut section = Section::new(Page {
+    let mut section = ThreadSection::new(Page {
         title: section_name.clone(),
-        url: next_url.to_string(),
+        loc: next_loc.clone(),
         content: index,
     });
 
@@ -73,23 +122,28 @@ pub fn read(path: &Path, url: &str) -> Section {
         .collect::<Result<Vec<((u32, String), DirEntry)>>>()
         .unwrap();
 
-    files.sort_by_key(|x| x.0 .0);
+    files.sort_by_key(|x| x.0.0);
 
     // loop over nodes and add them to the section
     for ((_, file_name), item) in files {
         let file_type = item.file_type().unwrap();
         if file_type.is_dir() {
-            let child_section = read(&item.path(), &next_url);
-            section.children.push(Node::Section(child_section));
+            let child_section = read(&item.path(), &next_loc, reads);
+            let thread_node = Arc::new(Mutex::new(ThreadNode::Section(child_section)));
+            section.children.push(thread_node.clone());
+            reads.insert(item.path(), thread_node);
         } else if file_type.is_file() {
             let text = read_to_string(item.path()).unwrap();
             let page_body = read_markdown(text);
 
-            section.children.push(Node::Page(Page {
+            let thread_node = Arc::new(Mutex::new(ThreadNode::Page(Page {
                 title: file_name.clone(),
-                url: format!("{}/{}", next_url, &file_name),
+                loc: next_loc.join(&Locator::new(&file_name)),
                 content: page_body,
-            }));
+            })));
+
+            section.children.push(thread_node.clone());
+            reads.insert(item.path(), thread_node);
         }
     }
 
