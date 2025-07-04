@@ -9,6 +9,7 @@ use std::{
 
 use markdown_ppp::{
     self,
+    ast::{Block, Inline, Link},
     html_printer::{config::Config, render_html},
     parser::parse_markdown,
 };
@@ -90,21 +91,21 @@ pub fn read(
     loc: &Locator,
     reads: &mut HashMap<PathBuf, ThreadNodeType>,
 ) -> ThreadSection {
-    dbg!(path);
     let index_path = path.join("index.md");
-    let index = read_markdown(read_to_string(&index_path).unwrap());
     let (_, section_name) = filename_info(path.file_stem().unwrap());
 
-    let next_loc = if path.eq(Path::new(&crate::config::Config::get().content)) {
+    let loc = if path.eq(Path::new(&crate::config::Config::get().content)) {
         loc.clone()
     } else {
         loc.join(&Locator::new(&section_name))
     };
 
+    let index = read_markdown(read_to_string(&index_path).unwrap(), &loc);
+
     // make section with index page
     let mut section = ThreadSection::new(Page {
         title: section_name.clone(),
-        loc: next_loc.clone(),
+        loc: loc.clone(),
         content: index,
     });
 
@@ -128,17 +129,17 @@ pub fn read(
     for ((_, file_name), item) in files {
         let file_type = item.file_type().unwrap();
         if file_type.is_dir() {
-            let child_section = read(&item.path(), &next_loc, reads);
+            let child_section = read(&item.path(), &loc, reads);
             let thread_node = Arc::new(Mutex::new(ThreadNode::Section(child_section)));
             section.children.push(thread_node.clone());
             reads.insert(item.path(), thread_node);
         } else if file_type.is_file() {
             let text = read_to_string(item.path()).unwrap();
-            let page_body = read_markdown(text);
+            let page_body = read_markdown(text, &loc);
 
             let thread_node = Arc::new(Mutex::new(ThreadNode::Page(Page {
                 title: file_name.clone(),
-                loc: next_loc.join(&Locator::new(&file_name)),
+                loc: loc.join(&Locator::new(&file_name)),
                 content: page_body,
             })));
 
@@ -160,8 +161,30 @@ fn filename_info(filename: &OsStr) -> (u32, String) {
     (number, name)
 }
 
-fn read_markdown(content: String) -> String {
+fn read_markdown(content: String, loc: &Locator) -> String {
     let state = markdown_ppp::parser::MarkdownParserState::default();
-    let doc = parse_markdown(state, &content).expect("failed to parse markdown");
+    let mut doc = parse_markdown(state, &content).expect("failed to parse markdown");
+
+    rewrite_links(&mut doc.blocks, loc);
+
     render_html(&doc, Config::default())
+}
+
+fn rewrite_links(blocks: &mut Vec<Block>, loc: &Locator) {
+    for item in blocks {
+        if let Block::Paragraph(p_items) = item {
+            for p_item in p_items {
+                if let Inline::Link(link) = p_item {
+                    // TODO determine if internal link
+                    link.destination = rewrite_internal_link(link.destination.clone(), loc);
+                }
+            }
+        }
+    }
+}
+
+fn rewrite_internal_link(link: String, loc: &Locator) -> String {
+    let path = PathBuf::from(&link);
+    let (_, filename) = filename_info(path.file_stem().unwrap());
+    loc.join(&Locator::new(&filename)).url()
 }
