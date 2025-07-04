@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs::{File, create_dir_all},
     io::Write,
+    path::Path,
     sync::Mutex,
 };
 
@@ -9,7 +10,7 @@ use askama::Template;
 
 use crate::{
     errors::Error,
-    locator::Locator,
+    locator::{self, Locator},
     reader::{Node, Page, Section},
     templates::{BaseTemplate, ContentTableTemplate},
 };

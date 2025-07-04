@@ -427,6 +427,8 @@ dependencies = [
  "markdown-ppp",
  "notify",
  "notify-debouncer-full",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]

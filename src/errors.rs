@@ -20,5 +20,8 @@ pub enum Error {
     CommandNotFound,
 
     #[error("Error")]
-    Generic {message: String}
+    Generic { message: String },
+
+    #[error("Serde json error")]
+    Serde(#[from] serde_json::Error),
 }

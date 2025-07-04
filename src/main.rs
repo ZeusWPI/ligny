@@ -3,6 +3,7 @@ mod errors;
 mod locator;
 mod notify;
 mod render;
+mod search;
 mod serve;
 mod templates;
 
@@ -14,6 +15,7 @@ use locator::Locator;
 use notify::spawn_watcher_thread;
 use reader::{Node, READS, Section, read};
 use render::build;
+use search::build_index;
 use serve::serve;
 
 mod reader;
@@ -30,16 +32,18 @@ async fn main() {
     let command = args.get(1).map(|a| a.as_str()).unwrap_or(BUILD_COMMAND);
 
     println!("{:?}", render());
-
-    let handle = spawn_watcher_thread();
+    println!("{:?}", build_index());
 
     let out = match command {
         "build" => build(),
-        "serve" => serve().await,
+        "serve" => {
+            let handle = spawn_watcher_thread();
+            let result = serve().await;
+            let _ = handle.join();
+            result
+        }
         _ => Err(Error::CommandNotFound),
     };
-
-    let _ = handle.join();
 
     println!("{out:?}");
 }
