@@ -1,11 +1,11 @@
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     fs::{read_dir, read_to_string, DirEntry},
     io::Result,
     path::Path,
 };
 
-use markdown::{self, ParseOptions};
+use markdown::{self};
 
 #[derive(Debug)]
 pub enum Node {
