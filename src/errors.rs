@@ -18,4 +18,7 @@ pub enum Error {
 
     #[error("Command not found")]
     CommandNotFound,
+
+    #[error("Error")]
+    Generic {message: String}
 }

@@ -13,3 +13,4 @@ http-body-util = "0.1"
 hyper-util = { version = "0.1", features = ["full"] }
 tokio = {version = "1.46.0", features = ["macros", "rt-multi-thread"]}
 markdown-ppp = "2.0.1"
+notify-debouncer-full = "0.5.0"

@@ -9,7 +9,7 @@ use std::{
 
 use markdown_ppp::{
     self,
-    ast::{Block, Inline, Link},
+    ast::{Block, Inline},
     html_printer::{config::Config, render_html},
     parser::parse_markdown,
 };
@@ -76,6 +76,12 @@ impl From<ThreadNode> for Node {
     }
 }
 
+impl From<&Arc<Mutex<ThreadNode>>> for Node {
+    fn from(section: &Arc<Mutex<ThreadNode>>) -> Self {
+        section.lock().unwrap().clone().into()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Page {
     pub title: String,
@@ -90,7 +96,7 @@ pub fn read(
     path: &Path,
     loc: &Locator,
     reads: &mut HashMap<PathBuf, ThreadNodeType>,
-) -> ThreadSection {
+) -> ThreadNodeType {
     let index_path = path.join("index.md");
     let (_, section_name) = filename_info(path.file_stem().unwrap());
 
@@ -129,10 +135,8 @@ pub fn read(
     for ((_, file_name), item) in files {
         let file_type = item.file_type().unwrap();
         if file_type.is_dir() {
-            let child_section = read(&item.path(), &loc, reads);
-            let thread_node = Arc::new(Mutex::new(ThreadNode::Section(child_section)));
-            section.children.push(thread_node.clone());
-            reads.insert(item.path(), thread_node);
+            let child_node = read(&item.path(), &loc, reads);
+            section.children.push(child_node);
         } else if file_type.is_file() {
             let text = read_to_string(item.path()).unwrap();
             let page_body = read_markdown(text, &loc);
@@ -144,11 +148,14 @@ pub fn read(
             })));
 
             section.children.push(thread_node.clone());
-            reads.insert(item.path(), thread_node);
+            reads.insert(item.path().canonicalize().unwrap(), thread_node);
         }
     }
 
-    section
+    let thread_section = Arc::new(Mutex::new(ThreadNode::Section(section)));
+    reads.insert(index_path.canonicalize().unwrap(), thread_section.clone());
+
+    thread_section
 }
 
 fn filename_info(filename: &OsStr) -> (u32, String) {
@@ -161,7 +168,7 @@ fn filename_info(filename: &OsStr) -> (u32, String) {
     (number, name)
 }
 
-fn read_markdown(content: String, loc: &Locator) -> String {
+pub fn read_markdown(content: String, loc: &Locator) -> String {
     let state = markdown_ppp::parser::MarkdownParserState::default();
     let mut doc = parse_markdown(state, &content).expect("failed to parse markdown");
 

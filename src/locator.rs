@@ -56,6 +56,7 @@ impl Locator {
         path_str.push_str(".md");
         path_str
     }
+
 }
 
 impl Display for Locator {

@@ -1,6 +1,7 @@
 mod config;
 mod errors;
 mod locator;
+mod notify;
 mod render;
 mod serve;
 mod templates;
@@ -10,7 +11,8 @@ use std::path::Path;
 use config::Config;
 use errors::Error;
 use locator::Locator;
-use reader::{READS, Section, read};
+use notify::spawn_watcher_thread;
+use reader::{Node, READS, Section, read};
 use render::build;
 use serve::serve;
 
@@ -29,23 +31,33 @@ async fn main() {
 
     println!("{:?}", render());
 
+    let handle = spawn_watcher_thread();
+
     let out = match command {
         "build" => build(),
         "serve" => serve().await,
         _ => Err(Error::CommandNotFound),
     };
 
-    println!("{:?}", out);
+    let _ = handle.join();
+
+    println!("{out:?}");
 }
 
 fn render() -> Result<(), Error> {
     let mut reads = READS.lock().unwrap();
-    let root = read(
+    let root: Node = (&read(
         Path::new(&Config::get().content),
         &Locator::new(""),
         &mut reads,
-    );
+    ))
+        .into();
 
-    let root: Section = root.into();
-    root.render(&root)
+    match root {
+        Node::Section(section) => {
+            let root: Section = section;
+            root.render(&root)
+        }
+        Node::Page(_) => Ok(()),
+    }
 }

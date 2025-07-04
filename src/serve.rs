@@ -1,7 +1,4 @@
-use std::fs::File;
-use std::io::Read;
 use std::net::SocketAddr;
-use std::path::Path;
 
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::Method;
