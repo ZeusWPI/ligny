@@ -1,17 +1,12 @@
 use std::{
-    collections::HashMap,
-    fs::{File, create_dir_all},
-    io::Write,
-    sync::Mutex,
+    collections::HashMap, fs::{create_dir_all, File}, io::Write, path::Path, sync::Mutex
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use askama::Template;
 
 use crate::{
-    locator::Locator,
-    reader::{Node, Page, Section},
-    templates::{BaseTemplate, ContentTableTemplate},
+    config::Config, locator::Locator, reader::{read, Node, Page, Section, READS}, templates::{BaseTemplate, ContentTableTemplate}
 };
 
 use std::sync::LazyLock;
@@ -21,7 +16,7 @@ pub static RENDERS: LazyLock<Mutex<HashMap<String, String>>> =
 
 impl Page {
     pub fn render(&self, root: &Section) -> Result<()> {
-        let content_table = ContentTableTemplate { root, page: self };
+        let content_table = ContentTableTemplate { root, curr_page: self };
 
         let html = BaseTemplate {
             table: &content_table,
@@ -64,7 +59,8 @@ impl Node {
     }
 }
 
-pub fn build() -> Result<()> {
+/// write all rendered pages to files
+pub fn write_pages_to_files() -> Result<()> {
     let renders = RENDERS.lock().unwrap();
 
     for (url, html) in renders.iter() {
@@ -83,4 +79,24 @@ pub fn build() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// read all files in the content directory and render them using templates to memory
+pub fn read_files_and_render_templates() -> Result<()> {
+    let mut reads = READS.lock().unwrap();
+    let root: Node = (&read(
+        Path::new(&Config::get().content),
+        &Locator::new(""),
+        &mut reads,
+    )?)
+        .into();
+
+    match root {
+        Node::Section(section) => {
+            let root: Section = section;
+            root.render(&root)
+                .map_err(|e| anyhow!("Failed to render root with error: {e}"))
+        }
+        Node::Page(_) => Ok(()),
+    }
 }

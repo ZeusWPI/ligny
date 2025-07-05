@@ -6,14 +6,10 @@ mod search;
 mod serve;
 mod templates;
 
-use std::path::Path;
-
 use anyhow::{Result, anyhow};
 use config::Config;
-use locator::Locator;
 use notify::spawn_watcher_thread;
-use reader::{Node, READS, Section, read};
-use render::build;
+use render::{write_pages_to_files, read_files_and_render_templates};
 use search::build_index;
 use serve::serve;
 
@@ -30,11 +26,11 @@ async fn main() -> Result<()> {
 
     let command = args.get(1).map(|a| a.as_str()).unwrap_or(BUILD_COMMAND);
 
-    render()?;
+    read_files_and_render_templates()?;
     build_index()?;
 
     match command {
-        "build" => build(),
+        "build" => write_pages_to_files(),
         "serve" => {
             let handle = spawn_watcher_thread();
             let result = serve().await;
@@ -48,23 +44,4 @@ async fn main() -> Result<()> {
     }?;
 
     Ok(())
-}
-
-fn render() -> anyhow::Result<()> {
-    let mut reads = READS.lock().unwrap();
-    let root: Node = (&read(
-        Path::new(&Config::get().content),
-        &Locator::new(""),
-        &mut reads,
-    )?)
-        .into();
-
-    match root {
-        Node::Section(section) => {
-            let root: Section = section;
-            root.render(&root)
-                .map_err(|e| anyhow!("Failed to render root with error: {e}"))
-        }
-        Node::Page(_) => Ok(()),
-    }
 }

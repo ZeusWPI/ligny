@@ -49,13 +49,6 @@ impl Locator {
         let path = Locator::new(&Config::get().public).join(self);
         path.components.join("/")
     }
-
-    pub fn content_path(&self) -> String {
-        let path = Locator::new(&Config::get().content).join(self);
-        let mut path_str = path.components.join("/");
-        path_str.push_str(".md");
-        path_str
-    }
 }
 
 impl Display for Locator {
