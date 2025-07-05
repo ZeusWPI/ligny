@@ -9,7 +9,7 @@ mod templates;
 use anyhow::{Result, anyhow};
 use config::Config;
 use notify::spawn_watcher_thread;
-use render::{write_pages_to_files, read_files_and_render_templates};
+use render::{read_files, write_pages_to_files};
 use search::build_index;
 use serve::serve;
 
@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
 
     let command = args.get(1).map(|a| a.as_str()).unwrap_or(BUILD_COMMAND);
 
-    read_files_and_render_templates()?;
+    read_files()?;
     build_index()?;
 
     match command {

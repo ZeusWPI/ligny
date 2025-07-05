@@ -1,4 +1,4 @@
-use std::{env, net::IpAddr, sync::OnceLock};
+use std::{env, net::IpAddr, path::PathBuf, sync::OnceLock};
 
 use dotenvy::dotenv;
 
@@ -6,7 +6,7 @@ static CONFIG: OnceLock<Config> = OnceLock::new();
 
 pub struct Config {
     pub public: String,
-    pub content: String,
+    pub content: PathBuf,
     pub index_name: String,
     pub port: u16,
     pub address: IpAddr,
@@ -24,7 +24,7 @@ impl Config {
             dotenv().ok();
             Config {
                 public: env::var("PUBLIC").unwrap_or("public".into()),
-                content: env::var("CONTENT").unwrap_or("0_content".into()),
+                content: PathBuf::from(env::var("CONTENT").unwrap_or("0_content".into())),
                 index_name: env::var("INDEX").unwrap_or("index.json".into()),
                 port: env::var("PORT")
                     .map(|v| v.parse::<u16>().expect("PORT is invalid"))

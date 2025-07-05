@@ -1,19 +1,24 @@
 use std::{
+    ffi::OsStr,
     fs::read_to_string,
-    ops::DerefMut,
+    ops::{Deref, DerefMut},
     path::Path,
     thread::{self, JoinHandle},
     time::Duration,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow};
 
 use crate::{
     config::Config,
-    reader::{Node, READS, Section, ThreadNode, markdown_to_html},
+    locator::Locator,
+    reader::{READS, ThreadNode, markdown_to_html, read},
 };
 
-use notify::{Event, EventKind, RecursiveMode, event::ModifyKind};
+use notify::{
+    Event, EventKind, RecursiveMode,
+    event::{CreateKind, ModifyKind, RemoveKind},
+};
 use notify_debouncer_full::{DebouncedEvent, new_debouncer};
 
 pub fn spawn_watcher_thread() -> JoinHandle<()> {
@@ -27,7 +32,7 @@ pub fn spawn_watcher_thread() -> JoinHandle<()> {
             .watch(Path::new(&Config::get().content), RecursiveMode::Recursive)
             .expect("Could not watch directory");
 
-        println!("Watching {}", Config::get().content);
+        println!("Watching {}", Config::get().content.to_string_lossy());
 
         for result in rx {
             match result {
@@ -39,46 +44,118 @@ pub fn spawn_watcher_thread() -> JoinHandle<()> {
 }
 
 fn handle_event(event: &DebouncedEvent) -> Result<()> {
-    if let DebouncedEvent {
-        event:
-            Event {
-                kind: EventKind::Modify(ModifyKind::Data(_)),
-                paths,
-                ..
-            },
-        ..
-    } = event
-    {
-        let reads = READS.lock().unwrap();
-        for path in paths {
-            if let Some(node) = reads.get(&path.canonicalize().unwrap()) {
-                let root_path = Path::new(&Config::get().content).join("index.md");
-                let root: Node = reads
-                    .get(&root_path.canonicalize().unwrap())
-                    .unwrap()
-                    .into();
-
-                let root: Section = match root {
-                    Node::Section(section) => section,
-                    Node::Page(_) => todo!(),
-                };
-
-                let text = read_to_string(path)?;
-                match node.lock().unwrap().deref_mut() {
-                    ThreadNode::Section(section) => {
-                        let page_body = markdown_to_html(text, &section.body.loc)?;
-                        section.body.content = page_body;
-                        section.body.render(&root)?;
+    match event {
+        DebouncedEvent {
+            event:
+                Event {
+                    kind: EventKind::Modify(ModifyKind::Data(_)),
+                    paths,
+                    ..
+                },
+            ..
+        } => {
+            let reads = READS.lock().unwrap();
+            for path in paths {
+                let loc = Locator::from_content_path(path)?;
+                if let Some(node) = reads.get(&loc) {
+                    let text = read_to_string(path)?;
+                    match node.lock().unwrap().deref_mut() {
+                        ThreadNode::Section(section) => {
+                            let page_body = markdown_to_html(text, &section.body.loc)?;
+                            section.body.content = page_body;
+                        }
+                        ThreadNode::Page(page) => {
+                            let page_body = markdown_to_html(text, &page.loc)?;
+                            page.content = page_body;
+                        }
                     }
-                    ThreadNode::Page(page) => {
-                        let page_body = markdown_to_html(text, &page.loc)?;
-                        page.content = page_body;
-                        page.render(&root)?;
-                    }
+
+                    println!("Detected change for url: {}", loc.url());
                 }
             }
         }
-    };
+        DebouncedEvent {
+            event:
+                Event {
+                    kind: EventKind::Create(CreateKind::File),
+                    paths,
+                    ..
+                },
+            ..
+        } => {
+            let mut reads = READS.lock().unwrap();
+            for path in paths {
+                let path = path.canonicalize().unwrap();
+
+                let parent_locator = Locator::from_content_path(&path)?.parent();
+
+                let mut parent = path.parent().with_context(|| {
+                    format!("Could not get parent of created file: {}", path.display())
+                })?;
+
+                if path.file_stem() == Some(OsStr::new("index")) {
+                    parent = parent.parent().with_context(|| {
+                        format!(
+                            "Could not get parent of parent of index.md: {}",
+                            path.display()
+                        )
+                    })?;
+                }
+
+                let new_node = read(parent, &parent_locator.parent(), &mut reads)?;
+                if let Some(parent_node) = reads.get(&parent_locator) {
+                    match parent_node.lock().unwrap().deref_mut() {
+                        ThreadNode::Section(parent_section) => {
+                            *parent_section = new_node;
+                            println!("Detected added page");
+                            Ok(())
+                        }
+                        _ => Err(anyhow!(
+                            "Impossible situation encountered on file create event!"
+                        )),
+                    }?;
+                }
+            }
+        }
+
+        DebouncedEvent {
+            event:
+                Event {
+                    kind: EventKind::Remove(RemoveKind::File | RemoveKind::Folder),
+                    paths,
+                    ..
+                },
+            ..
+        } => {
+            let mut reads = READS.lock().unwrap();
+            for path in paths {
+                let loc = Locator::from_content_path(path)?;
+
+                reads.remove(&loc);
+
+                let parent_locator = loc.parent();
+                if let Some(parent_node) = reads.get(&parent_locator) {
+                    match parent_node.lock().unwrap().deref_mut() {
+                        ThreadNode::Section(parent_section) => {
+                            parent_section.children.retain(|child| {
+                                match child.lock().unwrap().deref() {
+                                    ThreadNode::Section(section) => section.body.loc != loc,
+                                    ThreadNode::Page(page) => page.loc != loc,
+                                }
+                            });
+                            Ok(())
+                        }
+                        ThreadNode::Page(_) => {
+                            Err(anyhow!("Impossible situation encountered on delete event!"))
+                        }
+                    }?;
+                };
+
+                println!("Detected file removal")
+            }
+        }
+        _ => (),
+    }
 
     Ok(())
 }

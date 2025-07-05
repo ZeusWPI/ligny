@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{DirEntry, read_dir, read_to_string},
+    ops::Deref,
     path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
 };
@@ -18,7 +19,7 @@ use std::sync::Arc;
 
 use crate::locator::Locator;
 
-type ThreadNodeType = Arc<Mutex<ThreadNode>>;
+pub type ThreadNodeType = Arc<Mutex<ThreadNode>>;
 
 #[derive(Debug, Clone)]
 pub enum ThreadNode {
@@ -26,7 +27,7 @@ pub enum ThreadNode {
     Page(Page),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Node {
     Section(Section),
     Page(Page),
@@ -38,7 +39,7 @@ pub struct ThreadSection {
     pub body: Page,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Section {
     pub children: Vec<Node>,
     pub body: Page,
@@ -53,32 +54,33 @@ impl ThreadSection {
     }
 }
 
-impl From<ThreadSection> for Section {
-    fn from(thread_section: ThreadSection) -> Self {
+// Converting from ThreadSection -> Section should be avoided as it has to clone every Page.
+impl From<&ThreadSection> for Section {
+    fn from(thread_section: &ThreadSection) -> Self {
         let extracted_children: Vec<Node> = thread_section
             .children
             .iter()
-            .map(|n| n.lock().unwrap().to_owned().into())
+            .map(|n| n.lock().unwrap().deref().into())
             .collect();
         Section {
             children: extracted_children,
-            body: thread_section.body,
+            body: thread_section.body.clone(),
         }
     }
 }
 
-impl From<ThreadNode> for Node {
-    fn from(thread_node: ThreadNode) -> Self {
+impl From<&ThreadNode> for Node {
+    fn from(thread_node: &ThreadNode) -> Self {
         match thread_node {
             ThreadNode::Section(section) => Node::Section(section.into()),
-            ThreadNode::Page(page) => Node::Page(page),
+            ThreadNode::Page(page) => Node::Page(page.clone()),
         }
     }
 }
 
 impl From<&Arc<Mutex<ThreadNode>>> for Node {
     fn from(section: &Arc<Mutex<ThreadNode>>) -> Self {
-        section.lock().unwrap().clone().into()
+        section.lock().unwrap().deref().into()
     }
 }
 
@@ -89,18 +91,22 @@ pub struct Page {
     pub content: String,
 }
 
-pub static READS: LazyLock<Mutex<HashMap<PathBuf, ThreadNodeType>>> =
+pub static READS: LazyLock<Mutex<HashMap<Locator, ThreadNodeType>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub fn read(
     path: &Path,
     loc: &Locator,
-    reads: &mut HashMap<PathBuf, ThreadNodeType>,
-) -> Result<ThreadNodeType> {
+    reads: &mut HashMap<Locator, ThreadNodeType>,
+) -> Result<ThreadSection> {
     let index_path = path.join("index.md");
     let section_name = file_title(path)?;
 
-    let loc = if path.eq(Path::new(&crate::config::Config::get().content)) {
+    let loc = if path
+        .canonicalize()
+        .unwrap()
+        .eq(&crate::config::Config::get().content.canonicalize().unwrap())
+    {
         loc.clone()
     } else {
         loc.join(&Locator::new(&section_name))
@@ -153,38 +159,41 @@ pub fn read(
         let file_type = item.file_type()?;
         if file_type.is_dir() {
             let child_node = read(&item.path(), &loc, reads)?;
-            section.children.push(child_node);
+            let loc = child_node.body.loc.clone();
+            let thread_section = Arc::new(Mutex::new(ThreadNode::Section(child_node)));
+            reads.insert(loc, thread_section.clone());
+            section.children.push(thread_section);
         } else if file_type.is_file() {
-            let thread_node = read_page(item.path(), &loc)?;
-            section.children.push(thread_node.clone());
-            reads.insert(item.path().canonicalize().unwrap(), thread_node);
+            let page = read_page(&item.path(), &loc)?;
+            let loc = page.loc.clone();
+            let thread_node = Arc::new(Mutex::new(ThreadNode::Page(page)));
+            section.children.push(Arc::clone(&thread_node));
+            reads.insert(loc, thread_node);
         } else {
             continue;
         };
     }
 
-    let thread_section = Arc::new(Mutex::new(ThreadNode::Section(section)));
-    reads.insert(index_path.canonicalize().unwrap(), thread_section.clone());
-    Ok(thread_section)
+    Ok(section)
 }
 
 /// given a markdown file path, reads the contents and converts it to HTML
-fn read_page(file_path: PathBuf, loc: &Locator) -> Result<Arc<Mutex<ThreadNode>>> {
-    let file_content = read_to_string(&file_path)
+pub fn read_page(file_path: &PathBuf, loc: &Locator) -> Result<Page> {
+    let file_content = read_to_string(file_path)
         .with_context(|| format!("Can't read file: '{}'", file_path.display()))?;
     let page_content = markdown_to_html(file_content, loc)
         .with_context(|| format!("Can't convert markdown to html: '{}'", file_path.display()))?;
 
-    let file_name = file_title(&file_path)?;
-    Ok(Arc::new(Mutex::new(ThreadNode::Page(Page {
+    let file_name = file_title(file_path)?;
+    Ok(Page {
         title: file_name.clone(),
         loc: loc.join(&Locator::new(&file_name)),
         content: page_content,
-    }))))
+    })
 }
 
 /// returns the index at the start of the file name
-fn file_order_index(path: &Path) -> Result<u32> {
+pub fn file_order_index(path: &Path) -> Result<u32> {
     let stem = get_stem(path)?;
     stem.split('_')
         .next()

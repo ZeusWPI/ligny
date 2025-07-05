@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::ops::Deref;
 
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::Method;
@@ -14,7 +15,10 @@ use tokio::net::TcpListener;
 use anyhow::Result;
 
 use crate::Config;
-use crate::render::RENDERS;
+use crate::locator::Locator;
+use crate::reader::READS;
+use crate::reader::ThreadNode;
+use crate::render::get_root;
 
 pub async fn serve() -> Result<()> {
     let addr: SocketAddr = SocketAddr::from((Config::get().address, Config::get().port));
@@ -53,14 +57,24 @@ fn not_found() -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
 }
 
 async fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
-    let renders = RENDERS.lock().unwrap();
+    let reads = READS.lock().unwrap();
 
-    match renders.get(url) {
-        Some(page) => Ok(Response::builder().status(StatusCode::OK).body(
-            Full::new(page.clone().into())
-                .map_err(|e| match e {})
-                .boxed(),
-        )?),
+    match reads.get(&Locator::from_url(url)) {
+        Some(node) => {
+            let root = get_root(&reads)?;
+            let node = node.lock().unwrap();
+
+            let page = match node.deref() {
+                ThreadNode::Section(section) => &section.body,
+                ThreadNode::Page(page) => page,
+            };
+
+            let html = page.render(&root)?;
+
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .body(Full::new(html.into()).map_err(|e| match e {}).boxed())?)
+        }
         None => not_found(),
     }
 }
