@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::config::Config;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Locator {
     components: Vec<String>,
 }

@@ -82,7 +82,7 @@ impl From<&Arc<Mutex<ThreadNode>>> for Node {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Page {
     pub title: String,
     pub loc: Locator,

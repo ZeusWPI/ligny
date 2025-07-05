@@ -5,7 +5,7 @@ use askama::Template;
 #[template(path = "content_table.html")]
 pub struct ContentTableTemplate<'a> {
     pub root: &'a crate::reader::Section,
-    pub page: &'a crate::reader::Page,
+    pub curr_page: &'a crate::reader::Page,
 }
 
 #[derive(Template)]
