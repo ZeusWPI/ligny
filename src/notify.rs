@@ -6,12 +6,13 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Result;
+
 use crate::{
     config::Config,
-    reader::{Node, READS, Section, ThreadNode, read_markdown},
+    reader::{Node, READS, Section, ThreadNode, markdown_to_html},
 };
 
-use crate::errors::Error;
 use notify::{Event, EventKind, RecursiveMode, event::ModifyKind};
 use notify_debouncer_full::{DebouncedEvent, new_debouncer};
 
@@ -37,7 +38,7 @@ pub fn spawn_watcher_thread() -> JoinHandle<()> {
     })
 }
 
-fn handle_event(event: &DebouncedEvent) -> Result<(), Error> {
+fn handle_event(event: &DebouncedEvent) -> Result<()> {
     if let DebouncedEvent {
         event:
             Event {
@@ -65,12 +66,12 @@ fn handle_event(event: &DebouncedEvent) -> Result<(), Error> {
                 let text = read_to_string(path)?;
                 match node.lock().unwrap().deref_mut() {
                     ThreadNode::Section(section) => {
-                        let page_body = read_markdown(text, &section.body.loc);
+                        let page_body = markdown_to_html(text, &section.body.loc)?;
                         section.body.content = page_body;
                         section.body.render(&root)?;
                     }
                     ThreadNode::Page(page) => {
-                        let page_body = read_markdown(text, &page.loc);
+                        let page_body = markdown_to_html(text, &page.loc)?;
                         page.content = page_body;
                         page.render(&root)?;
                     }

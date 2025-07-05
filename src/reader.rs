@@ -1,12 +1,12 @@
 use std::{
     collections::HashMap,
-    ffi::OsStr,
     fs::{DirEntry, read_dir, read_to_string},
-    io::Result,
     path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
 };
 
+use anyhow::{Context, Result, anyhow, bail};
+use color_print::ceprintln;
 use markdown_ppp::{
     self,
     ast::{Block, Inline},
@@ -96,9 +96,9 @@ pub fn read(
     path: &Path,
     loc: &Locator,
     reads: &mut HashMap<PathBuf, ThreadNodeType>,
-) -> ThreadNodeType {
+) -> Result<ThreadNodeType> {
     let index_path = path.join("index.md");
-    let (_, section_name) = filename_info(path.file_stem().unwrap());
+    let section_name = file_title(path)?;
 
     let loc = if path.eq(Path::new(&crate::config::Config::get().content)) {
         loc.clone()
@@ -106,92 +106,153 @@ pub fn read(
         loc.join(&Locator::new(&section_name))
     };
 
-    let index = read_markdown(read_to_string(&index_path).unwrap(), &loc);
+    let file_content = read_to_string(&index_path)
+        .with_context(|| format!("Failed reading index file {index_path:?}"))?;
+    let content = markdown_to_html(file_content, &loc)
+        .with_context(|| format!("Failed converting markdown to HTML in file {index_path:?}"))?;
 
     // make section with index page
     let mut section = ThreadSection::new(Page {
         title: section_name.clone(),
         loc: loc.clone(),
-        content: index,
+        content,
     });
 
     // read files, filter index and sort by number
-    let files = read_dir(path).unwrap();
+    let files = read_dir(path)
+        .with_context(|| format!("Failed to read dir with path {}", path.display()))?;
     let mut files = files
-        .filter(|x| {
-            if let Ok(item) = x {
-                item.file_name() != "index.md"
-            } else {
-                false
+        .filter_map(|x| {
+            let entry = match x {
+                Ok(entry) => entry,
+                Err(e) => {
+                    eprintln!("Skipping entry due to I/O error: {e}");
+                    return None;
+                }
+            };
+
+            if entry.path().ends_with("index.md") {
+                return None;
+            }
+
+            match file_order_index(&entry.path()) {
+                Ok(index) => Some((index, entry)),
+                Err(err) => {
+                    let err = err;
+                    ceprintln!("<yellow>Skipping file with reason:</yellow>\n{err:?}\n");
+                    None
+                }
             }
         })
-        .map(|x| x.map(|x| (filename_info(x.path().file_stem().unwrap()), x)))
-        .collect::<Result<Vec<((u32, String), DirEntry)>>>()
-        .unwrap();
+        .collect::<Vec<(u32, DirEntry)>>();
 
-    files.sort_by_key(|x| x.0.0);
+    files.sort_by_key(|(index, _)| *index);
 
     // loop over nodes and add them to the section
-    for ((_, file_name), item) in files {
-        let file_type = item.file_type().unwrap();
+    for (_, item) in files {
+        let file_type = item.file_type()?;
         if file_type.is_dir() {
-            let child_node = read(&item.path(), &loc, reads);
+            let child_node = read(&item.path(), &loc, reads)?;
             section.children.push(child_node);
         } else if file_type.is_file() {
-            let text = read_to_string(item.path()).unwrap();
-            let page_body = read_markdown(text, &loc);
-
-            let thread_node = Arc::new(Mutex::new(ThreadNode::Page(Page {
-                title: file_name.clone(),
-                loc: loc.join(&Locator::new(&file_name)),
-                content: page_body,
-            })));
-
+            let thread_node = read_page(item.path(), &loc)?;
             section.children.push(thread_node.clone());
             reads.insert(item.path().canonicalize().unwrap(), thread_node);
-        }
+        } else {
+            continue;
+        };
     }
 
     let thread_section = Arc::new(Mutex::new(ThreadNode::Section(section)));
     reads.insert(index_path.canonicalize().unwrap(), thread_section.clone());
-
-    thread_section
+    Ok(thread_section)
 }
 
-fn filename_info(filename: &OsStr) -> (u32, String) {
-    let filename = filename.to_str().unwrap();
-    let mut filename_parts = filename.split("_");
+/// given a markdown file path, reads the contents and converts it to HTML
+fn read_page(file_path: PathBuf, loc: &Locator) -> Result<Arc<Mutex<ThreadNode>>> {
+    let file_content = read_to_string(&file_path)
+        .with_context(|| format!("Can't read file: '{}'", file_path.display()))?;
+    let page_content = markdown_to_html(file_content, loc)
+        .with_context(|| format!("Can't convert markdown to html: '{}'", file_path.display()))?;
 
-    let number = filename_parts.next().unwrap().parse().unwrap();
-    let name = filename_parts.collect::<Vec<&str>>().join(" ");
-
-    (number, name)
+    let file_name = file_title(&file_path)?;
+    Ok(Arc::new(Mutex::new(ThreadNode::Page(Page {
+        title: file_name.clone(),
+        loc: loc.join(&Locator::new(&file_name)),
+        content: page_content,
+    }))))
 }
 
-pub fn read_markdown(content: String, loc: &Locator) -> String {
+/// returns the index at the start of the file name
+fn file_order_index(path: &Path) -> Result<u32> {
+    let stem = get_stem(path)?;
+    stem.split('_')
+        .next()
+        .ok_or_else(|| anyhow!("Filename does not contain an '_' separator: '{}'", stem))?
+        .parse()
+        .with_context(|| {
+            format!(
+                "Could not parse order index in '{}' from {}",
+                stem,
+                path.display()
+            )
+        })
+}
+
+/// gets the title from a filename
+///
+/// strips leading order index and extension
+fn file_title(path: &Path) -> Result<String> {
+    let stem = get_stem(path)?;
+    let filename_parts = stem.split("_").skip(1);
+
+    let file_title = filename_parts.collect::<Vec<&str>>().join(" ");
+    if file_title.is_empty() {
+        bail!("Filename does not have a title: '{}'", path.display());
+    }
+
+    Ok(file_title)
+}
+
+fn get_stem(path: &Path) -> Result<&str> {
+    path.file_stem()
+        .ok_or_else(|| anyhow!("File has no stem: '{}'", path.display()))?
+        .to_str()
+        .ok_or_else(|| anyhow!("Filename is not valid UTF-8: '{}'", path.display()))
+}
+
+/// convert markdown into HTML
+pub fn markdown_to_html(content: String, loc: &Locator) -> Result<String> {
     let state = markdown_ppp::parser::MarkdownParserState::default();
-    let mut doc = parse_markdown(state, &content).expect("failed to parse markdown");
+    let mut doc = parse_markdown(state, &content)
+        .map_err(|e| anyhow!("Failed to parse markdown with nom error: {e}"))?;
 
-    rewrite_links(&mut doc.blocks, loc);
+    rewrite_links(&mut doc.blocks, loc)?;
 
-    render_html(&doc, Config::default())
+    Ok(render_html(&doc, Config::default()))
 }
 
-fn rewrite_links(blocks: &mut Vec<Block>, loc: &Locator) {
+/// rewrite relative links inside the markdown to valid relative urls
+fn rewrite_links(blocks: &mut Vec<Block>, loc: &Locator) -> Result<()> {
     for item in blocks {
         if let Block::Paragraph(p_items) = item {
             for p_item in p_items {
                 if let Inline::Link(link) = p_item {
                     // TODO determine if internal link
-                    link.destination = rewrite_internal_link(link.destination.clone(), loc);
+                    link.destination = rewrite_internal_link(link.destination.clone(), loc)
+                        .with_context(|| {
+                            format!("Can't rewrite link with destination {}", link.destination)
+                        })?;
                 }
             }
         }
     }
+
+    Ok(())
 }
 
-fn rewrite_internal_link(link: String, loc: &Locator) -> String {
+fn rewrite_internal_link(link: String, loc: &Locator) -> Result<String> {
     let path = PathBuf::from(&link);
-    let (_, filename) = filename_info(path.file_stem().unwrap());
-    loc.join(&Locator::new(&filename)).url()
+    let filename = file_title(&path)?;
+    Ok(loc.join(&Locator::new(&filename)).url())
 }
