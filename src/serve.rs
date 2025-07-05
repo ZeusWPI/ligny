@@ -14,7 +14,6 @@ use tokio::net::TcpListener;
 use anyhow::Result;
 
 use crate::Config;
-use crate::Error;
 use crate::render::RENDERS;
 
 pub async fn serve() -> Result<()> {
@@ -38,36 +37,30 @@ pub async fn serve() -> Result<()> {
 
 async fn reponse(
     req: Request<hyper::body::Incoming>,
-) -> Result<Response<BoxBody<Bytes, std::io::Error>>, Error> {
+) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, path) => page_send(path).await,
         _ => not_found(),
     }
 }
 
-fn not_found() -> Result<Response<BoxBody<Bytes, std::io::Error>>, Error> {
-    Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body(
-            Full::new("NOT FOUND".into())
-                .map_err(|e| match e {})
-                .boxed(),
-        )
-        .map_err(Error::from)
+fn not_found() -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+    Ok(Response::builder().status(StatusCode::NOT_FOUND).body(
+        Full::new("NOT FOUND".into())
+            .map_err(|e| match e {})
+            .boxed(),
+    )?)
 }
 
-async fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>, Error> {
+async fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
     let renders = RENDERS.lock().unwrap();
 
     match renders.get(url) {
-        Some(page) => Response::builder()
-            .status(StatusCode::OK)
-            .body(
-                Full::new(page.clone().into())
-                    .map_err(|e| match e {})
-                    .boxed(),
-            )
-            .map_err(Error::from),
+        Some(page) => Ok(Response::builder().status(StatusCode::OK).body(
+            Full::new(page.clone().into())
+                .map_err(|e| match e {})
+                .boxed(),
+        )?),
         None => not_found(),
     }
 }

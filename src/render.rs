@@ -9,7 +9,6 @@ use anyhow::{Context, Result};
 use askama::Template;
 
 use crate::{
-    errors::Error,
     locator::Locator,
     reader::{Node, Page, Section},
     templates::{BaseTemplate, ContentTableTemplate},
@@ -21,7 +20,7 @@ pub static RENDERS: LazyLock<Mutex<HashMap<String, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 impl Page {
-    pub fn render(&self, root: &Section) -> Result<(), Error> {
+    pub fn render(&self, root: &Section) -> Result<()> {
         let content_table = ContentTableTemplate { root, page: self };
 
         let html = BaseTemplate {
@@ -29,7 +28,12 @@ impl Page {
             page: self,
         }
         .render()
-        .map_err(Error::from)?;
+        .with_context(|| {
+            format!(
+                "Failed to render template of '{}' for location: '{}'",
+                self.title, self.loc
+            )
+        })?;
 
         let mut renders = RENDERS.lock().unwrap();
         renders.insert(self.loc.url(), html);
@@ -41,7 +45,7 @@ impl Page {
 }
 
 impl Section {
-    pub fn render(&self, root: &Section) -> Result<(), Error> {
+    pub fn render(&self, root: &Section) -> Result<()> {
         self.body.render(root)?;
         for child in self.children.iter() {
             child.render(root)?;
@@ -52,7 +56,7 @@ impl Section {
 }
 
 impl Node {
-    pub fn render(&self, root: &Section) -> Result<(), Error> {
+    pub fn render(&self, root: &Section) -> Result<()> {
         match self {
             Node::Section(section) => section.render(root),
             Node::Page(page) => page.render(root),

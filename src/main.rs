@@ -1,5 +1,4 @@
 mod config;
-mod errors;
 mod locator;
 mod notify;
 mod render;
@@ -11,7 +10,6 @@ use std::path::Path;
 
 use anyhow::{Result, anyhow};
 use config::Config;
-use errors::Error;
 use locator::Locator;
 use notify::spawn_watcher_thread;
 use reader::{Node, READS, Section, read};

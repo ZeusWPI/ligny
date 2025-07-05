@@ -3,8 +3,8 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::config::Config;
-use crate::errors::Error;
 use crate::render::RENDERS;
+use anyhow::{Context, Result};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -18,7 +18,7 @@ struct Page {
     url: String,
 }
 
-pub fn build_index() -> Result<(), Error> {
+pub fn build_index() -> Result<()> {
     let renders = RENDERS.lock().unwrap();
 
     let mut index = Index { pages: vec![] };
@@ -31,13 +31,12 @@ pub fn build_index() -> Result<(), Error> {
 
     let json = serde_json::to_string(&index)?;
 
-    let mut file = File::create(Path::new(&Config::get().public).join(&Config::get().index_name))?;
+    let path = Path::new(&Config::get().public).join(&Config::get().index_name);
+    let mut file = File::create(&path)
+        .with_context(|| format!("Failed to create file: '{}'", path.display()))?;
 
-    file.write_all(json.as_bytes()).map_err(|e| Error::Build {
-        message: e.to_string(),
-    })?;
-
-    println!("Build index");
+    file.write_all(json.as_bytes())
+        .with_context(|| format!("Failed to write json to file: '{}'", path.display()))?;
 
     Ok(())
 }
