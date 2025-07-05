@@ -11,11 +11,13 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
+use anyhow::Result;
+
 use crate::Config;
 use crate::Error;
 use crate::render::RENDERS;
 
-pub async fn serve() -> Result<(), Error> {
+pub async fn serve() -> Result<()> {
     let addr: SocketAddr = SocketAddr::from((Config::get().address, Config::get().port));
 
     println!("Listening on {addr}");

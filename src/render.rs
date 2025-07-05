@@ -5,6 +5,7 @@ use std::{
     sync::Mutex,
 };
 
+use anyhow::{Context, Result};
 use askama::Template;
 
 use crate::{
@@ -59,18 +60,20 @@ impl Node {
     }
 }
 
-pub fn build() -> Result<(), Error> {
+pub fn build() -> Result<()> {
     let renders = RENDERS.lock().unwrap();
 
     for (url, html) in renders.iter() {
         let loc = Locator::from_url(url);
-        create_dir_all(loc.public_dir()).map_err(Error::from)?;
-
-        let mut file = File::create(loc.public_path()).map_err(Error::from)?;
-
-        file.write_all(html.as_bytes()).map_err(|e| Error::Build {
-            message: e.to_string(),
+        create_dir_all(loc.public_dir()).with_context(|| {
+            format!("Failed to create all dirs for path: '{}'", loc.public_dir())
         })?;
+
+        let mut file = File::create(loc.public_path())
+            .with_context(|| format!("Failed to create file: '{}'", loc.public_dir()))?;
+
+        file.write_all(html.as_bytes())
+            .with_context(|| format!("Failed to write html to file: '{}'", loc.public_dir()))?;
 
         println!("Build page {} to {}", url, loc.public_path());
     }

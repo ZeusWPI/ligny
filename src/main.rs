@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
     render()?;
     build_index()?;
 
-    let out = match command {
+    match command {
         "build" => build(),
         "serve" => {
             let handle = spawn_watcher_thread();
@@ -43,10 +43,11 @@ async fn main() -> Result<()> {
             let _ = handle.join();
             result
         }
-        _ => Err(Error::CommandNotFound),
-    };
-
-    println!("{out:?}");
+        _ => Err(anyhow!(
+            "Command '{}' not found. Use 'build' or 'serve'.",
+            command
+        )),
+    }?;
 
     Ok(())
 }
