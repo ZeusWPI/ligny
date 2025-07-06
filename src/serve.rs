@@ -53,7 +53,7 @@ pub async fn serve() -> Result<()> {
 }
 
 pub fn send_reload(tx: &Sender<Bytes>) -> Result<()> {
-    tx.send("event: reload\ndata: hier\n\n".into())
+    tx.send("event: reload\ndata: \n\n".into())
         .with_context(|| "Could not send reload event")?;
     Ok(())
 }
