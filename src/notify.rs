@@ -4,10 +4,11 @@ use std::{
     ops::{Deref, DerefMut},
     path::Path,
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use anyhow::{Context, Result, anyhow};
+use color_print::ceprintln;
 use hyper::body::Bytes;
 use tokio::sync::broadcast::Sender;
 
@@ -40,8 +41,13 @@ pub fn spawn_watcher_thread(sse: Sender<Bytes>) -> JoinHandle<()> {
         for result in rx {
             match result {
                 Ok(events) => events.iter().for_each(|e| {
+                    let now = SystemTime::now();
                     if handle_event(e).unwrap() {
                         send_reload(&sse).unwrap();
+                        ceprintln!(
+                            "<green>Elapsed Time: {}ms</green>",
+                            now.elapsed().unwrap().as_micros() as f64 / 1000.0
+                        );
                     }
                 }),
                 Err(errors) => errors.iter().for_each(|error| println!("{error:?}")),
