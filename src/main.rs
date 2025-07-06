@@ -8,7 +8,6 @@ mod templates;
 
 use anyhow::{Result, anyhow};
 use config::Config;
-use notify::spawn_watcher_thread;
 use render::{read_files, write_pages_to_files};
 use search::build_index;
 use serve::serve;
@@ -31,12 +30,7 @@ async fn main() -> Result<()> {
 
     match command {
         "build" => write_pages_to_files(),
-        "serve" => {
-            let handle = spawn_watcher_thread();
-            let result = serve().await;
-            let _ = handle.join();
-            result
-        }
+        "serve" => serve().await,
         _ => Err(anyhow!(
             "Command '{}' not found. Use 'build' or 'serve'.",
             command

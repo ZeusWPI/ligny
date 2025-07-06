@@ -20,7 +20,17 @@
         </main>
     </div>
 
+
 </body>
+
+<script>
+const evtSource = new EventSource("/sse");
+evtSource.addEventListener("reload", (event) => {
+  evtSource.close()
+  window.location.reload();
+});
+</script>
+
 <style>
     body {
         margin: 0;

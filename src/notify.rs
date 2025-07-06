@@ -8,11 +8,14 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
+use hyper::body::Bytes;
+use tokio::sync::broadcast::Sender;
 
 use crate::{
     config::Config,
     locator::Locator,
     reader::{READS, ThreadNode, markdown_to_html, read},
+    serve::send_reload,
 };
 
 use notify::{
@@ -21,7 +24,7 @@ use notify::{
 };
 use notify_debouncer_full::{DebouncedEvent, new_debouncer};
 
-pub fn spawn_watcher_thread() -> JoinHandle<()> {
+pub fn spawn_watcher_thread(sse: Sender<Bytes>) -> JoinHandle<()> {
     thread::spawn(move || {
         let (tx, rx) = std::sync::mpsc::channel();
 
@@ -36,15 +39,19 @@ pub fn spawn_watcher_thread() -> JoinHandle<()> {
 
         for result in rx {
             match result {
-                Ok(events) => events.iter().for_each(|e| handle_event(e).unwrap()),
+                Ok(events) => events.iter().for_each(|e| {
+                    if handle_event(e).unwrap() {
+                        send_reload(&sse).unwrap();
+                    }
+                }),
                 Err(errors) => errors.iter().for_each(|error| println!("{error:?}")),
             }
         }
     })
 }
 
-fn handle_event(event: &DebouncedEvent) -> Result<()> {
-    match event {
+fn handle_event(event: &DebouncedEvent) -> Result<bool> {
+    let updated = match event {
         DebouncedEvent {
             event:
                 Event {
@@ -73,6 +80,7 @@ fn handle_event(event: &DebouncedEvent) -> Result<()> {
                     println!("Detected change for url: {}", loc.url());
                 }
             }
+            true
         }
         DebouncedEvent {
             event:
@@ -116,6 +124,7 @@ fn handle_event(event: &DebouncedEvent) -> Result<()> {
                     }?;
                 }
             }
+            true
         }
 
         DebouncedEvent {
@@ -151,11 +160,12 @@ fn handle_event(event: &DebouncedEvent) -> Result<()> {
                     }?;
                 };
 
-                println!("Detected file removal")
+                println!("Detected file removal");
             }
+            true
         }
-        _ => (),
-    }
+        _ => false,
+    };
 
-    Ok(())
+    Ok(updated)
 }
