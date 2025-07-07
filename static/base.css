@@ -1,0 +1,127 @@
+body {
+    margin: 0;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+header {
+    display: flex;
+    color: white;
+    background-color: #ff7f00;
+    padding: 2rem 3rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+header a {
+    font-size: 2rem;
+    font-weight: bold;
+    text-decoration: none;
+    color: white;
+}
+
+.page {
+    display: grid;
+    grid-template-columns: 1fr min(70rem, 100%) 1fr;
+    gap: 2rem;
+    padding-top: 3rem;
+}
+
+.content {
+    grid-column: 2;
+    min-height: 100%;
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+}
+
+.index {
+    grid-column: 1;
+    justify-self: end;
+    text-align: right;
+    font-size: large;
+
+}
+
+.index a {
+    color: black;
+    text-decoration: none;
+}
+
+.index a.current {
+    color:#ff7f00;
+}
+
+.index ul {
+    list-style: circle;
+    direction: rtl;
+}
+
+.search-results li {
+  margin-top: 1rem;
+  border-bottom: 1px solid #ccc;
+  font-size: 0.9rem;
+}
+
+.search-results li:first-op-type {
+  margin-top: 0;
+}
+
+.search-item {
+  margin-bottom: 1rem;
+  color: black;
+  font-size: 0.7rem;
+}
+
+
+.search-container {
+  display: inline-block;
+  position: relative;
+  width: 100%;
+  max-width: 250px;
+}
+
+.search-results a {
+  font-size:1.2rem;
+  display:inline-block;
+  margin-bottom:.5rem;
+  color: #1a88c2;
+}
+
+.search-results {
+  display: none;
+  position: absolute;
+  background: #fff;
+  padding:1rem;
+  box-shadow:2px 2px 2px 0 rgba(0,0,0,.5);
+  max-height:500px;
+  overflow:auto;
+  width: 100%;
+}
+.search-container ul {
+  list-style-type: none; /* Remove bullets */
+  padding: 0; 
+  margin: 0; 
+}
+
+@media (max-width: 1400px) {
+    .page {
+        grid-template-columns: 1fr min(70rem, 100%);
+    }
+}
+
+@media (max-width: 1200px) {
+    .page {
+        grid-template-columns: 1fr;
+    }
+
+    .content, .index {
+        grid-column: 1;
+    }
+
+    .index {
+        order: 1;
+        justify-self: left;
+    }
+}
