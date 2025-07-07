@@ -8,8 +8,15 @@
 </head>
 
 <body>
-    <header><a href="/">Zeus</a>
-        <nav><input type="text"></nav>
+    <header>
+      <a href="/">Zeus</a>
+      <div class="search-container">
+        <nav><input type="text" class="search-input"></nav>
+        <div class="search-results">
+          <ul class="search-list">
+          </ul>
+        </div>
+      </div>
     </header>
     <div class="page">
         <div class="index">
@@ -23,12 +30,15 @@
 
 </body>
 
+<script src="/fuse.js"></script>
+<script src="/search.js"></script>
+
 <script>
-const evtSource = new EventSource("/sse");
-evtSource.addEventListener("reload", (event) => {
-  evtSource.close()
-  window.location.reload();
-});
+  const evtSource = new EventSource("/sse");
+  evtSource.addEventListener("reload", (event) => {
+    evtSource.close()
+    window.location.reload();
+  });
 </script>
 
 <style>
@@ -90,6 +100,53 @@ evtSource.addEventListener("reload", (event) => {
     .index ul {
         list-style: circle;
         direction: rtl;
+    }
+
+    .search-results li {
+      margin-top: 1rem;
+      border-bottom: 1px solid #ccc;
+      font-size: 0.9rem;
+    }
+
+    .search-results li:first-op-type {
+      margin-top: 0;
+    }
+
+    .search-item {
+      margin-bottom: 1rem;
+      color: black;
+      font-size: 0.7rem;
+    }
+
+
+    .search-container {
+      display: inline-block;
+      position: relative;
+      width: 100%;
+      max-width: 250px;
+    }
+
+    .search-results a {
+      font-size:1.2rem;
+      display:inline-block;
+      margin-bottom:.5rem;
+      color: #1a88c2;
+    }
+
+    .search-results {
+      display: none;
+      position: absolute;
+      background: #fff;
+      padding:1rem;
+      box-shadow:2px 2px 2px 0 rgba(0,0,0,.5);
+      max-height:500px;
+      overflow:auto;
+      width: 100%;
+    }
+    .search-container ul {
+      list-style-type: none; /* Remove bullets */
+      padding: 0; 
+      margin: 0; 
     }
 
     @media (max-width: 1400px) {

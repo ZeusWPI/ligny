@@ -1,45 +1,44 @@
-use std::{fs::File, io::Write, ops::Deref, path::Path};
+use std::{collections::HashMap, fs::File, io::Write, ops::Deref, path::Path};
 
 use anyhow::{Context, Result};
 use serde::Serialize;
 
 use crate::{
     config::Config,
-    reader::{READS, ThreadNode},
-    render::get_root,
+    locator::Locator,
+    reader::{ThreadNode, ThreadNodeType},
 };
 
 #[derive(Serialize)]
-struct Index {
-    pages: Vec<Page>,
-}
-
-#[derive(Serialize)]
-struct Page {
+pub struct Page {
     html: String,
     url: String,
+    title: String,
 }
 
-pub fn build_index() -> Result<()> {
-    let reads = READS.lock().unwrap();
-    let root = get_root(&reads)?;
+type Index = Vec<Page>;
 
-    let mut index = Index { pages: vec![] };
+pub fn render_index(reads: &HashMap<Locator, ThreadNodeType>) -> Result<Index> {
+    let mut index = vec![];
     for (loc, node) in reads.iter() {
         let page = match node.lock().unwrap().deref() {
             ThreadNode::Section(section) => section.body.clone(),
             ThreadNode::Page(page) => page.clone(),
         };
 
-        let html = page.render(&root)?;
-        index.pages.push(Page {
-            html: html.clone(),
+        index.push(Page {
+            html: page.content.clone(),
             url: loc.url().clone(),
+            title: page.title.clone(),
         });
     }
 
-    let json = serde_json::to_string(&index)?;
+    Ok(index)
+}
 
+pub fn write_index(reads: &HashMap<Locator, ThreadNodeType>) -> Result<()> {
+    let index = render_index(reads)?;
+    let json = serde_json::to_string(&index)?;
     let path = Path::new(&Config::get().public).join(&Config::get().index_name);
     let mut file = File::create(&path)
         .with_context(|| format!("Failed to create file: '{}'", path.display()))?;

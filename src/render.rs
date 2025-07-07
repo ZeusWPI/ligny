@@ -14,6 +14,7 @@ use crate::{
     config::Config,
     locator::Locator,
     reader::{Node, Page, READS, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
+    search::write_index,
     templates::{BaseTemplate, ContentTableTemplate},
 };
 
@@ -81,6 +82,8 @@ pub fn write_pages_to_files() -> Result<()> {
 
         println!("Build page {} to {}", loc.url(), loc.public_path());
     }
+
+    write_index(&reads)?;
 
     Ok(())
 }

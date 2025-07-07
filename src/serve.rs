@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
 use std::net::SocketAddr;
 use std::ops::Deref;
 
@@ -21,9 +24,10 @@ use tokio_stream::wrappers::BroadcastStream;
 use crate::Config;
 use crate::locator::Locator;
 use crate::notify::spawn_watcher_thread;
-use crate::reader::READS;
 use crate::reader::ThreadNode;
+use crate::reader::{READS, ThreadNodeType};
 use crate::render::get_root;
+use crate::search::render_index;
 
 pub async fn serve() -> Result<()> {
     let addr: SocketAddr = SocketAddr::from((Config::get().address, Config::get().port));
@@ -64,7 +68,7 @@ async fn reponse(
 ) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/sse") => event_stream(tx).await,
-        (&Method::GET, path) => page_send(path).await,
+        (&Method::GET, path) => page_send(path),
         _ => not_found(),
     }
 }
@@ -77,27 +81,45 @@ fn not_found() -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
     )?)
 }
 
-async fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
     let reads = READS.lock().unwrap();
+    let index_url = format!("/{}", Config::get().index_name);
+    if url == index_url {
+        index_send(&reads)
+    } else {
+        match reads.get(&Locator::from_url(url)) {
+            Some(node) => {
+                let root = get_root(&reads)?;
+                let node = node.lock().unwrap();
 
-    match reads.get(&Locator::from_url(url)) {
-        Some(node) => {
-            let root = get_root(&reads)?;
-            let node = node.lock().unwrap();
+                let page = match node.deref() {
+                    ThreadNode::Section(section) => &section.body,
+                    ThreadNode::Page(page) => page,
+                };
 
-            let page = match node.deref() {
-                ThreadNode::Section(section) => &section.body,
-                ThreadNode::Page(page) => page,
-            };
+                let html = page.render(&root)?;
 
-            let html = page.render(&root)?;
-
-            Ok(Response::builder()
-                .status(StatusCode::OK)
-                .body(Full::new(html.into()).map_err(|e| match e {}).boxed())?)
+                Ok(Response::builder()
+                    .status(StatusCode::OK)
+                    .body(Full::new(html.into()).map_err(|e| match e {}).boxed())?)
+            }
+            None => static_file_serve(url),
         }
-        None => not_found(),
     }
+}
+
+fn index_send(
+    reads: &HashMap<Locator, ThreadNodeType>,
+) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+    let index = render_index(reads)?;
+    let json = serde_json::to_string(&index)?;
+    let body = Full::new(json.into()).map_err(|e| match e {}).boxed();
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/json")
+        .body(body)?;
+    Ok(response)
 }
 
 async fn event_stream(tx: Sender<Bytes>) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
@@ -114,7 +136,21 @@ async fn event_stream(tx: Sender<Bytes>) -> Result<Response<BoxBody<Bytes, std::
         .status(StatusCode::OK)
         .header("Content-Type", "text/event-stream")
         .header("Cache-Control", "no-cache")
-        .body(boxed_body)
-        .unwrap();
+        .body(boxed_body)?;
+
     Ok(response)
+}
+
+fn static_file_serve(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+    let loc = Locator::from_url(url);
+    let file = File::open(loc.static_path());
+    if let Ok(mut file) = file {
+        let mut content = String::new();
+        file.read_to_string(&mut content)?;
+        Ok(Response::builder()
+            .status(StatusCode::OK)
+            .body(Full::new(content.into()).map_err(|e| match e {}).boxed())?)
+    } else {
+        not_found()
+    }
 }

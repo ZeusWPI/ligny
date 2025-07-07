@@ -1,6 +1,6 @@
-use std::cmp::Eq;
 use std::fmt::Display;
 use std::path::Path;
+use std::{cmp::Eq, path::PathBuf};
 
 use crate::config::Config;
 
@@ -85,6 +85,10 @@ impl Locator {
     pub fn public_dir(&self) -> String {
         let path = Locator::new(&Config::get().public).join(self);
         path.components.join("/")
+    }
+
+    pub fn static_path(&self) -> PathBuf {
+        Config::get().static_dir.join(self.components.join("/"))
     }
 }
 
