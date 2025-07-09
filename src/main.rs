@@ -8,7 +8,7 @@ mod templates;
 
 use std::env;
 
-use anyhow::{anyhow, Ok, Result};
+use anyhow::{Ok, Result, anyhow};
 use config::Config;
 use render::{read_files, write_pages_to_files};
 use serve::serve;

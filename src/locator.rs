@@ -13,11 +13,17 @@ use anyhow::{Result, anyhow};
 
 impl Locator {
     pub fn new(base: &str) -> Self {
-        let components = if base.is_empty() {
-            vec![]
-        } else {
-            vec![base.to_string()]
-        };
+        let components = base
+            .split("/")
+            .map(String::from)
+            .filter(|c| !c.is_empty() && c != "index.md")
+            .map(|c| {
+                c.split_once('_')
+                    .map(|(_, e)| e.replace(".md", ""))
+                    .unwrap_or(c)
+            })
+            .collect::<Vec<String>>();
+
         Locator { components }
     }
 
@@ -59,7 +65,13 @@ impl Locator {
 
     pub fn join(&self, other: &Locator) -> Self {
         let mut locator_new = self.clone();
-        locator_new.components.append(&mut other.components.clone());
+        for component in other.clone().components {
+            match component.as_str() {
+                ".." => locator_new = locator_new.parent(),
+                "." => (),
+                _ => locator_new.components.push(component),
+            }
+        }
         locator_new
     }
 

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{create_dir, create_dir_all, File},
+    fs::{File, create_dir, create_dir_all},
     io::Write,
     ops::Deref,
     path::{Path, PathBuf},
@@ -107,7 +107,6 @@ pub fn read_files() -> Result<()> {
     Ok(())
 }
 
-///
 pub fn copy_static_files() -> Result<()> {
     create_dir("static/").or(anyhow::Ok(()))?;
     for file in STATIC_DIR.files() {
