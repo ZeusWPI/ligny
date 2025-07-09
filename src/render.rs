@@ -46,7 +46,7 @@ impl Page {
 pub fn get_root(reads: &HashMap<Locator, ThreadNodeType>) -> Result<Section> {
     let root: Node = reads
         .get(&Locator::root()?)
-        .with_context(|| "Could not retrieve root section")?
+        .context("Could not retrieve root section")?
         .into();
 
     let root: Section = match root {
