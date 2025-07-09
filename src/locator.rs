@@ -38,7 +38,7 @@ impl Locator {
 
     pub fn from_content_path(path: &Path) -> Result<Self> {
         let abs = path.canonicalize().unwrap_or(path.into());
-        let stripped = abs.strip_prefix(Config::get().content.canonicalize()?);
+        let stripped = abs.strip_prefix(Config::get().content.canonicalize()?)?;
         let components: Vec<String> = stripped
             .iter()
             .filter_map(|component| component.to_str().map(String::from))
