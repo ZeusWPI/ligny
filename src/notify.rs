@@ -7,7 +7,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use color_print::ceprintln;
 use hyper::body::Bytes;
 use tokio::sync::broadcast::Sender;
@@ -127,16 +127,12 @@ fn handle_event(event: &DebouncedEvent) -> Result<bool> {
 
                 let new_node = read(parent, &parent_locator.parent(), &mut reads)?;
                 if let Some(parent_node) = reads.get(&parent_locator) {
-                    match parent_node.lock().unwrap().deref_mut() {
-                        ThreadNode::Section(parent_section) => {
-                            *parent_section = new_node;
-                            println!("Detected added page");
-                            Ok(())
-                        }
-                        _ => Err(anyhow!(
-                            "Impossible situation encountered on file create event!"
-                        )),
-                    }?;
+                    let mut parent_node = parent_node.lock().unwrap();
+                    let parent_section = parent_node
+                        .get_section_mut()
+                        .context("Impossible situation encountered on file create event!")?;
+                    *parent_section = new_node;
+                    println!("Detected added page");
                 }
             }
             true
@@ -159,23 +155,19 @@ fn handle_event(event: &DebouncedEvent) -> Result<bool> {
 
                 let parent_locator = loc.parent();
                 if let Some(parent_node) = reads.get(&parent_locator) {
-                    match parent_node.lock().unwrap().deref_mut() {
-                        ThreadNode::Section(parent_section) => {
-                            parent_section.children.retain(|child| {
-                                match child.lock().unwrap().deref() {
-                                    ThreadNode::Section(section) => section.body.loc != loc,
-                                    ThreadNode::Page(page) => page.loc != loc,
-                                }
-                            });
-                            Ok(())
-                        }
-                        ThreadNode::Page(_) => {
-                            Err(anyhow!("Impossible situation encountered on delete event!"))
-                        }
-                    }?;
-                };
+                    let mut parent_node = parent_node.lock().unwrap();
+                    let parent_section = parent_node
+                        .get_section_mut()
+                        .context("Impossible situation encountered on file delete event!")?;
 
-                println!("Detected file removal");
+                    parent_section
+                        .children
+                        .retain(|child| match child.lock().unwrap().deref() {
+                            ThreadNode::Section(section) => section.body.loc != loc,
+                            ThreadNode::Page(page) => page.loc != loc,
+                        });
+                    println!("Detected file removal");
+                };
             }
             true
         }

@@ -13,7 +13,7 @@ use askama::Template;
 use crate::{
     config::Config,
     locator::Locator,
-    reader::{Node, Page, READS, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
+    reader::{Page, READS, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
     search::write_index,
     templates::{BaseTemplate, ContentTableTemplate},
 };
@@ -44,17 +44,11 @@ impl Page {
 }
 
 pub fn get_root(reads: &HashMap<Locator, ThreadNodeType>) -> Result<Section> {
-    let root: Node = reads
+    let root = reads
         .get(&Locator::root()?)
-        .with_context(|| "Could not retrieve root section")?
-        .into();
+        .with_context(|| "Could not retrieve root section")?;
 
-    let root: Section = match root {
-        Node::Section(section) => section,
-        Node::Page(_) => todo!(),
-    };
-
-    Ok(root)
+    Ok(root.lock().unwrap().get_section()?.into())
 }
 
 /// write all rendered pages to files

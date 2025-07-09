@@ -78,9 +78,19 @@ impl From<&ThreadNode> for Node {
     }
 }
 
-impl From<&Arc<Mutex<ThreadNode>>> for Node {
-    fn from(section: &Arc<Mutex<ThreadNode>>) -> Self {
-        section.lock().unwrap().deref().into()
+impl ThreadNode {
+    pub fn get_section_mut(&mut self) -> Result<&mut ThreadSection> {
+        match self {
+            ThreadNode::Section(thread_section) => Ok(thread_section),
+            ThreadNode::Page(_) => Err(anyhow!("Expected Node to be a section")),
+        }
+    }
+
+    pub fn get_section(&self) -> Result<&ThreadSection> {
+        match self {
+            ThreadNode::Section(thread_section) => Ok(thread_section),
+            ThreadNode::Page(_) => Err(anyhow!("Expected Node to be a section")),
+        }
     }
 }
 
