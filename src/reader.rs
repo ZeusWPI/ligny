@@ -255,9 +255,9 @@ fn rewrite_links(blocks: &mut Vec<Block>, loc: &Locator) -> Result<()> {
         if let Block::Paragraph(p_items) = item {
             for p_item in p_items {
                 if let Inline::Link(link) = p_item {
-                    if link.destination.starts_with("http") {
+                    if link.destination.contains(":") {
                         continue;
-                    } // TODO make better
+                    } // I'm sure this will not break
                     link.destination = rewrite_internal_link(link.destination.clone(), loc)
                         .with_context(|| {
                             format!("Can't rewrite link with destination {}", link.destination)
