@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
             serve().await
         }
         "init" => init_files(),
-        _ => bail!("Command '{}' not found. Use 'build' or 'serve'.", command),
+        _ => bail!("Command '{}' not found. Use 'init', 'build' or 'serve'.", command),
     }?;
 
     Ok(())
