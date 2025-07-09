@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsStr,
     fs::{DirEntry, read_dir, read_to_string},
     ops::Deref,
     path::{Path, PathBuf},
@@ -186,10 +187,17 @@ pub fn read_page(file_path: &PathBuf, loc: &Locator) -> Result<Page> {
     let (page_content, links) = markdown_to_html(file_content, loc)
         .with_context(|| format!("Can't convert markdown to html: '{}'", file_path.display()))?;
 
-    let file_name = file_title(file_path)?;
     Ok(Page {
-        title: file_name.clone(),
-        loc: loc.join(&Locator::new(&file_name)),
+        title: file_title(file_path)?,
+        loc: loc.join(&Locator::new(
+            &file_path
+                .file_name()
+                .ok_or(Err::<&OsStr, anyhow::Error>(anyhow!(
+                    "failed to get filename"
+                )))
+                .unwrap()
+                .to_string_lossy(),
+        )),
         content: page_content,
         links,
     })
