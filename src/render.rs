@@ -1,15 +1,14 @@
 use std::{
     collections::HashMap,
-    fs::{File, create_dir, create_dir_all},
+    fs::{File, create_dir_all},
     io::Write,
     ops::Deref,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex},
 };
 
 use anyhow::{Context, Result};
 use askama::Template;
-use include_dir::{Dir, include_dir};
 
 use crate::{
     config::Config,
@@ -18,8 +17,6 @@ use crate::{
     search::write_index,
     templates::{BaseTemplate, ContentTableTemplate},
 };
-
-static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/static/");
 
 impl Page {
     pub fn render(&self, root: &Section) -> Result<String> {
@@ -104,15 +101,5 @@ pub fn read_files() -> Result<()> {
         Locator::root()?,
         Arc::new(Mutex::new(ThreadNode::Section(root))),
     );
-    Ok(())
-}
-
-pub fn copy_static_files() -> Result<()> {
-    create_dir("static/").or(anyhow::Ok(()))?;
-    for file in STATIC_DIR.files() {
-        let path = PathBuf::from("static/").join(file.path());
-        File::create(path)?.write_all(file.contents())?;
-    }
-
     Ok(())
 }

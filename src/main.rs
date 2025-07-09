@@ -1,6 +1,8 @@
 mod config;
+mod init;
 mod locator;
 mod notify;
+mod reader;
 mod render;
 mod search;
 mod serve;
@@ -8,14 +10,12 @@ mod templates;
 
 use std::env;
 
-use anyhow::{Ok, Result, anyhow};
+use anyhow::{Ok, Result, bail};
 use config::Config;
 use render::{read_files, write_pages_to_files};
 use serve::serve;
 
-use crate::render::copy_static_files;
-
-mod reader;
+use crate::init::init_files;
 
 static BUILD_COMMAND: &str = "build";
 
@@ -27,16 +27,17 @@ async fn main() -> Result<()> {
 
     let command = args.get(1).map(|a| a.as_str()).unwrap_or(BUILD_COMMAND);
 
-    read_files()?;
-    copy_static_files()?;
-
     match command {
-        "build" => write_pages_to_files(),
-        "serve" => serve().await,
-        _ => Err(anyhow!(
-            "Command '{}' not found. Use 'build' or 'serve'.",
-            command
-        )),
+        "build" => {
+            read_files()?;
+            write_pages_to_files()
+        }
+        "serve" => {
+            read_files()?;
+            serve().await
+        }
+        "init" => init_files(),
+        _ => bail!("Command '{}' not found. Use 'build' or 'serve'.", command),
     }?;
 
     Ok(())
