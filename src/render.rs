@@ -11,9 +11,10 @@ use anyhow::{Context, Result};
 use askama::Template;
 
 use crate::{
+    CONTEXT,
     config::Config,
     locator::Locator,
-    reader::{Page, READS, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
+    reader::{Page, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
     search::write_index,
     templates::{BaseTemplate, ContentTableTemplate},
 };
@@ -53,11 +54,11 @@ pub fn get_root(reads: &HashMap<Locator, ThreadNodeType>) -> Result<Section> {
 
 /// write all rendered pages to files
 pub fn write_pages_to_files() -> Result<()> {
-    let reads = READS.lock().unwrap();
+    let context = CONTEXT.lock().unwrap();
 
-    let root = get_root(&reads)?;
+    let root = get_root(&context.reads)?;
 
-    for (loc, node) in reads.iter() {
+    for (loc, node) in context.reads.iter() {
         let page = match node.lock().unwrap().deref() {
             ThreadNode::Section(section) => section.body.clone(),
             ThreadNode::Page(page) => page.clone(),
@@ -74,26 +75,31 @@ pub fn write_pages_to_files() -> Result<()> {
         file.write_all(html.as_bytes())
             .with_context(|| format!("Failed to write html to file: '{}'", loc.public_dir()))?;
 
-        println!("Build page {} to {}", loc.url(), loc.public_path());
+        println!(
+            "Build page {} to {}",
+            loc.url(),
+            loc.public_path().display()
+        );
     }
 
-    write_index(&reads)?;
+    write_index(&context.reads)?;
 
     Ok(())
 }
 
 /// read all files in the content directory and render them using templates to memory
 pub fn read_files() -> Result<()> {
-    let mut reads = READS.lock().unwrap();
+    let mut context = CONTEXT.lock().unwrap();
     let root: ThreadSection = read(
         Path::new(&Config::get().content),
         &Locator::new(""),
-        &mut reads,
+        &mut context,
     )?;
 
-    let _ = reads.insert(
+    let _ = context.reads.insert(
         Locator::root()?,
-        Arc::new(Mutex::new(ThreadNode::Section(root))),
+        Arc::new(Mutex::new(ThreadNode::Section(root.clone()))),
     );
+
     Ok(())
 }

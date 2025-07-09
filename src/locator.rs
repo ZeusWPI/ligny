@@ -85,11 +85,11 @@ impl Locator {
         url
     }
 
-    pub fn public_path(&self) -> String {
+    pub fn public_path(&self) -> PathBuf {
         let path = Locator::new(&Config::get().public)
             .join(self)
             .join(&Locator::new("index.html"));
-        path.components.join("/")
+        Path::new(&path.components.join("/")).to_path_buf()
     }
 
     pub fn public_dir(&self) -> String {

@@ -1,9 +1,8 @@
 use std::{
-    collections::HashMap,
     fs::{DirEntry, read_dir, read_to_string},
     ops::Deref,
     path::{Path, PathBuf},
-    sync::{LazyLock, Mutex},
+    sync::Mutex,
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -17,7 +16,7 @@ use markdown_ppp::{
 
 use std::sync::Arc;
 
-use crate::locator::Locator;
+use crate::{Static, locator::Locator};
 
 pub type ThreadNodeType = Arc<Mutex<ThreadNode>>;
 
@@ -99,16 +98,10 @@ pub struct Page {
     pub title: String,
     pub loc: Locator,
     pub content: String,
+    pub links: Vec<Locator>,
 }
 
-pub static READS: LazyLock<Mutex<HashMap<Locator, ThreadNodeType>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-pub fn read(
-    path: &Path,
-    loc: &Locator,
-    reads: &mut HashMap<Locator, ThreadNodeType>,
-) -> Result<ThreadSection> {
+pub fn read(path: &Path, loc: &Locator, context: &mut Static) -> Result<ThreadSection> {
     let index_path = path.join("index.md");
     let section_name = file_title(path)?;
 
@@ -123,7 +116,7 @@ pub fn read(
 
     let file_content = read_to_string(&index_path)
         .with_context(|| format!("Failed reading index file {index_path:?}"))?;
-    let content = markdown_to_html(file_content, &loc)
+    let (content, page_links) = markdown_to_html(file_content, &loc)
         .with_context(|| format!("Failed converting markdown to HTML in file {index_path:?}"))?;
 
     // make section with index page
@@ -131,6 +124,7 @@ pub fn read(
         title: section_name.clone(),
         loc: loc.clone(),
         content,
+        links: page_links,
     });
 
     // read files, filter index and sort by number
@@ -166,17 +160,17 @@ pub fn read(
     for (_, item) in files {
         let file_type = item.file_type()?;
         if file_type.is_dir() {
-            let child_node = read(&item.path(), &loc, reads)?;
+            let child_node = read(&item.path(), &loc, context)?;
             let loc = child_node.body.loc.clone();
             let thread_section = Arc::new(Mutex::new(ThreadNode::Section(child_node)));
-            reads.insert(loc, thread_section.clone());
+            context.reads.insert(loc, thread_section.clone());
             section.children.push(thread_section);
         } else if file_type.is_file() {
             let page = read_page(&item.path(), &loc)?;
             let loc = page.loc.clone();
             let thread_node = Arc::new(Mutex::new(ThreadNode::Page(page)));
             section.children.push(Arc::clone(&thread_node));
-            reads.insert(loc, thread_node);
+            context.reads.insert(loc, thread_node);
         } else {
             continue;
         };
@@ -189,7 +183,7 @@ pub fn read(
 pub fn read_page(file_path: &PathBuf, loc: &Locator) -> Result<Page> {
     let file_content = read_to_string(file_path)
         .with_context(|| format!("Can't read file: '{}'", file_path.display()))?;
-    let page_content = markdown_to_html(file_content, loc)
+    let (page_content, links) = markdown_to_html(file_content, loc)
         .with_context(|| format!("Can't convert markdown to html: '{}'", file_path.display()))?;
 
     let file_name = file_title(file_path)?;
@@ -197,6 +191,7 @@ pub fn read_page(file_path: &PathBuf, loc: &Locator) -> Result<Page> {
         title: file_name.clone(),
         loc: loc.join(&Locator::new(&file_name)),
         content: page_content,
+        links,
     })
 }
 
@@ -239,38 +234,33 @@ fn get_stem(path: &Path) -> Result<&str> {
 }
 
 /// convert markdown into HTML
-pub fn markdown_to_html(content: String, loc: &Locator) -> Result<String> {
+pub fn markdown_to_html(content: String, loc: &Locator) -> Result<(String, Vec<Locator>)> {
     let state = markdown_ppp::parser::MarkdownParserState::default();
     let mut doc = parse_markdown(state, &content)
         .map_err(|e| anyhow!("Failed to parse markdown with nom error: {e}"))?;
 
-    rewrite_links(&mut doc.blocks, loc)?;
+    let links = rewrite_links(&mut doc.blocks, loc)?;
 
-    Ok(render_html(&doc, Config::default()))
+    Ok((render_html(&doc, Config::default()), links))
 }
 
 /// rewrite relative links inside the markdown to valid relative urls
-fn rewrite_links(blocks: &mut Vec<Block>, loc: &Locator) -> Result<()> {
+fn rewrite_links(blocks: &mut Vec<Block>, loc: &Locator) -> Result<Vec<Locator>> {
+    let mut internal_links = vec![];
     for item in blocks {
         if let Block::Paragraph(p_items) = item {
             for p_item in p_items {
                 if let Inline::Link(link) = p_item {
                     if link.destination.contains(":") {
                         continue;
-                    } // I'm sure this will not break
-                    link.destination = rewrite_internal_link(link.destination.clone(), loc)
-                        .with_context(|| {
-                            format!("Can't rewrite link with destination {}", link.destination)
-                        })?;
+                    } // TODO make better
+                    let rewritten_loc = loc.join(&Locator::new(&link.destination));
+                    link.destination = rewritten_loc.url();
+                    internal_links.push(rewritten_loc);
                 }
             }
         }
     }
 
-    Ok(())
-}
-
-fn rewrite_internal_link(link: String, loc: &Locator) -> Result<String> {
-    let ok = loc.join(&Locator::new(&link)).url();
-    Ok(ok)
+    Ok(internal_links)
 }

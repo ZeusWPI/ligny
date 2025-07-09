@@ -13,9 +13,11 @@ use hyper::body::Bytes;
 use tokio::sync::broadcast::Sender;
 
 use crate::{
+    CONTEXT,
     config::Config,
+    link_checker::check_links,
     locator::Locator,
-    reader::{READS, ThreadNode, markdown_to_html, read},
+    reader::{ThreadNode, markdown_to_html, read},
     serve::send_reload,
 };
 
@@ -50,6 +52,7 @@ pub fn spawn_watcher_thread(sse: Sender<Bytes>) -> JoinHandle<()> {
                             if let Err(err) = send_reload(&sse) {
                                 ceprintln!("<red>{err}</red>");
                             }
+
                             ceprintln!(
                                 "<green>Elapsed Time: {}ms</green>",
                                 now.elapsed().unwrap_or_default().as_micros() as f64 / 1000.0
@@ -76,19 +79,23 @@ fn handle_event(event: &DebouncedEvent) -> Result<bool> {
                 },
             ..
         } => {
-            let reads = READS.lock().unwrap();
+            let context = CONTEXT.lock().unwrap();
             for path in paths {
                 let loc = Locator::from_content_path(path)?;
-                if let Some(node) = reads.get(&loc) {
+                if let Some(node) = context.reads.get(&loc) {
                     let text = read_to_string(path)?;
                     match node.lock().unwrap().deref_mut() {
                         ThreadNode::Section(section) => {
-                            let page_body = markdown_to_html(text, &section.body.loc)?;
+                            let (page_body, links) = markdown_to_html(text, &section.body.loc)?;
                             section.body.content = page_body;
+                            section.body.links = links;
+                            check_links(&section.body, &context.reads);
                         }
                         ThreadNode::Page(page) => {
-                            let page_body = markdown_to_html(text, &page.loc)?;
+                            let (page_body, links) = markdown_to_html(text, &page.loc)?;
                             page.content = page_body;
+                            page.links = links;
+                            check_links(page, &context.reads);
                         }
                     }
 
@@ -106,7 +113,7 @@ fn handle_event(event: &DebouncedEvent) -> Result<bool> {
                 },
             ..
         } => {
-            let mut reads = READS.lock().unwrap();
+            let mut context = CONTEXT.lock().unwrap();
             for path in paths {
                 let path = path.canonicalize()?;
 
@@ -125,8 +132,8 @@ fn handle_event(event: &DebouncedEvent) -> Result<bool> {
                     })?;
                 }
 
-                let new_node = read(parent, &parent_locator.parent(), &mut reads)?;
-                if let Some(parent_node) = reads.get(&parent_locator) {
+                let new_node = read(parent, &parent_locator.parent(), &mut context)?;
+                if let Some(parent_node) = context.reads.get(&parent_locator) {
                     let mut parent_node = parent_node.lock().unwrap();
                     let parent_section = parent_node
                         .get_section_mut()
@@ -147,14 +154,14 @@ fn handle_event(event: &DebouncedEvent) -> Result<bool> {
                 },
             ..
         } => {
-            let mut reads = READS.lock().unwrap();
+            let mut context = CONTEXT.lock().unwrap();
             for path in paths {
                 let loc = Locator::from_content_path(path)?;
 
-                reads.remove(&loc);
+                context.reads.remove(&loc);
 
                 let parent_locator = loc.parent();
-                if let Some(parent_node) = reads.get(&parent_locator) {
+                if let Some(parent_node) = context.reads.get(&parent_locator) {
                     let mut parent_node = parent_node.lock().unwrap();
                     let parent_section = parent_node
                         .get_section_mut()

@@ -22,13 +22,13 @@ use anyhow::{Context, Result, anyhow};
 use tokio::sync::broadcast::{self, Sender};
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::Config;
 use crate::locator::Locator;
-use crate::notify::spawn_watcher_thread;
 use crate::reader::ThreadNode;
-use crate::reader::{READS, ThreadNodeType};
+use crate::reader::ThreadNodeType;
 use crate::render::get_root;
 use crate::search::render_index;
+use crate::watcher::spawn_watcher_thread;
+use crate::{CONTEXT, Config};
 
 pub async fn serve() -> Result<()> {
     let addr: SocketAddr = SocketAddr::from((Config::get().address, Config::get().port));
@@ -83,14 +83,14 @@ fn not_found() -> Result<Response<BoxBody<Bytes, anyhow::Error>>> {
 }
 
 fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, anyhow::Error>>> {
-    let reads = READS.lock().unwrap();
+    let context = CONTEXT.lock().unwrap();
     let index_url = format!("/{}", Config::get().index_name);
     if url == index_url {
-        index_send(&reads)
+        index_send(&context.reads)
     } else {
-        match reads.get(&Locator::from_url(url)) {
+        match context.reads.get(&Locator::from_url(url)) {
             Some(node) => {
-                let root = get_root(&reads)?;
+                let root = get_root(&context.reads)?;
                 let node = node.lock().unwrap();
 
                 let page = match node.deref() {
