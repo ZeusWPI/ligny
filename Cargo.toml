@@ -19,3 +19,4 @@ anyhow = "1.0.98"
 color-print = "0.3.7"
 futures-util = { version = "0.3", default-features = false}
 tokio-stream = {version = "0.1.17", default-features = false ,features = ["sync"]}
+include_dir = "0.7.4"
