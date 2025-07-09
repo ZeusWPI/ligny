@@ -1,20 +1,11 @@
 <ul>
-    {% for child in root.children %}
+    {% for page in pages %}
         <li>
             <a 
-                {% match child %} 
-                    {% when Section with (section) %}
-                        {% if &section.body == curr_page %}
-                            class="current"
-                        {% endif %}
-                        href="{{section.body.loc.url()}}">{{ section.body.title }}
-                    {% when Page with (page) %}
-                        {% if page == curr_page %}
-                            class="current"
-                        {% endif %}
-                        href="{{page.loc.url()}}">{{ page.title }}
-                {% endmatch %}
-            
+                {% if page == &curr_page %}
+                    class="current"
+                {% endif %}
+                href="{{page.loc.url()}}">{{ page.title }}
             </a>
         </li>
     {% endfor %}

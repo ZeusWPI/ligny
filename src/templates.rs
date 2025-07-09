@@ -1,10 +1,9 @@
-use crate::reader::Node::*;
 use askama::Template;
 
 #[derive(Template)]
 #[template(path = "content_table.html")]
 pub struct ContentTableTemplate<'a> {
-    pub root: &'a crate::reader::Section,
+    pub pages: Vec<&'a crate::reader::Page>,
     pub curr_page: &'a crate::reader::Page,
 }
 

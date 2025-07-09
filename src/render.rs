@@ -14,15 +14,16 @@ use crate::{
     CONTEXT,
     config::Config,
     locator::Locator,
-    reader::{Page, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
+    reader::{Node, Page, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
     search::write_index,
     templates::{BaseTemplate, ContentTableTemplate},
 };
 
 impl Page {
     pub fn render(&self, root: &Section) -> Result<String> {
+        let pages = flatten_sections(root);
         let content_table = ContentTableTemplate {
-            root,
+            pages,
             curr_page: self,
         };
 
@@ -42,6 +43,18 @@ impl Page {
 
         Ok(html)
     }
+}
+
+fn flatten_sections(root: &Section) -> Vec<&Page> {
+    let mut pages = Vec::new();
+    pages.push(&root.body);
+    for node in &root.children {
+        match node {
+            Node::Section(section) => pages.append(&mut flatten_sections(section)),
+            Node::Page(page) => pages.push(page),
+        };
+    }
+    pages
 }
 
 pub fn get_root(reads: &HashMap<Locator, ThreadNodeType>) -> Result<Section> {
