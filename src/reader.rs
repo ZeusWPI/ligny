@@ -1,5 +1,4 @@
 use std::{
-    ffi::OsStr,
     fs::{DirEntry, read_dir, read_to_string},
     ops::Deref,
     path::{Path, PathBuf},
@@ -192,10 +191,7 @@ pub fn read_page(file_path: &PathBuf, loc: &Locator) -> Result<Page> {
         loc: loc.join(&Locator::new(
             &file_path
                 .file_name()
-                .ok_or(Err::<&OsStr, anyhow::Error>(anyhow!(
-                    "failed to get filename"
-                )))
-                .unwrap()
+                .ok_or(anyhow!("failed to get filename"))?
                 .to_string_lossy(),
         )),
         content: page_content,
