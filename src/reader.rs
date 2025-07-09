@@ -103,9 +103,8 @@ pub fn read(
     let section_name = file_title(path)?;
 
     let loc = if path
-        .canonicalize()
-        .unwrap()
-        .eq(&crate::config::Config::get().content.canonicalize().unwrap())
+        .canonicalize()?
+        .eq(&crate::config::Config::get().content.canonicalize()?)
     {
         loc.clone()
     } else {
@@ -144,8 +143,7 @@ pub fn read(
             match file_order_index(&entry.path()) {
                 Ok(index) => Some((index, entry)),
                 Err(err) => {
-                    let err = err;
-                    ceprintln!("<yellow>Skipping file with reason:</yellow>\n{err:?}\n");
+                    ceprintln!("<yellow>Skipping file with reason:\n{err:?}</yellow>\n");
                     None
                 }
             }

@@ -38,9 +38,7 @@ impl Locator {
 
     pub fn from_content_path(path: &Path) -> Result<Self> {
         let abs = path.canonicalize().unwrap_or(path.into());
-        let stripped = abs
-            .strip_prefix(Config::get().content.canonicalize().unwrap())
-            .unwrap();
+        let stripped = abs.strip_prefix(Config::get().content.canonicalize()?);
         let components: Vec<String> = stripped
             .iter()
             .filter_map(|component| component.to_str().map(String::from))
@@ -49,7 +47,7 @@ impl Locator {
                 c.split_once('_')
                     .ok_or_else(|| {
                         anyhow!(
-                            "Section or Filename does not contain an '_' seperator: '{}'",
+                            "Section or Filename does not contain an '_' separator: '{}'",
                             c
                         )
                     })

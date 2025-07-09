@@ -36,21 +36,30 @@ pub fn spawn_watcher_thread(sse: Sender<Bytes>) -> JoinHandle<()> {
             .watch(Path::new(&Config::get().content), RecursiveMode::Recursive)
             .expect("Could not watch directory");
 
-        println!("Watching {}", Config::get().content.to_string_lossy());
+        ceprintln!(
+            "<blue>Watching {}</blue>",
+            Config::get().content.to_string_lossy()
+        );
 
         for result in rx {
             match result {
                 Ok(events) => events.iter().for_each(|e| {
                     let now = SystemTime::now();
-                    if handle_event(e).unwrap() {
-                        send_reload(&sse).unwrap();
-                        ceprintln!(
-                            "<green>Elapsed Time: {}ms</green>",
-                            now.elapsed().unwrap().as_micros() as f64 / 1000.0
-                        );
+                    match handle_event(e) {
+                        Ok(true) => {
+                            if let Err(err) = send_reload(&sse) {
+                                ceprintln!("<red>{err}</red>");
+                            }
+                            ceprintln!(
+                                "<green>Elapsed Time: {}ms</green>",
+                                now.elapsed().unwrap_or_default().as_micros() as f64 / 1000.0
+                            );
+                        }
+                        Ok(false) => (),
+                        Err(err) => ceprintln!("<red>{err}</red>"),
                     }
                 }),
-                Err(errors) => errors.iter().for_each(|error| println!("{error:?}")),
+                Err(errors) => errors.iter().for_each(|err| ceprintln!("<red>{err}</red>")),
             }
         }
     })
@@ -99,7 +108,7 @@ fn handle_event(event: &DebouncedEvent) -> Result<bool> {
         } => {
             let mut reads = READS.lock().unwrap();
             for path in paths {
-                let path = path.canonicalize().unwrap();
+                let path = path.canonicalize()?;
 
                 let parent_locator = Locator::from_content_path(&path)?.parent();
 

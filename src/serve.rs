@@ -4,6 +4,7 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::ops::Deref;
 
+use color_print::ceprintln;
 use futures_util::TryStreamExt;
 use http_body_util::StreamBody;
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
@@ -17,7 +18,7 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use tokio::sync::broadcast::{self, Sender};
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -50,7 +51,7 @@ pub async fn serve() -> Result<()> {
                 .await
                 && !err.is_incomplete_message()
             {
-                print!("Failed to serve connection: {err:?}");
+                ceprintln!("<red>Failed to serve connection: {err:}<red>");
             }
         });
     }
@@ -65,7 +66,7 @@ pub fn send_reload(tx: &Sender<Bytes>) -> Result<()> {
 async fn reponse(
     req: Request<hyper::body::Incoming>,
     tx: Sender<Bytes>,
-) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+) -> Result<Response<BoxBody<Bytes, anyhow::Error>>> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/sse") => event_stream(tx).await,
         (&Method::GET, path) => page_send(path),
@@ -73,7 +74,7 @@ async fn reponse(
     }
 }
 
-fn not_found() -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+fn not_found() -> Result<Response<BoxBody<Bytes, anyhow::Error>>> {
     Ok(Response::builder().status(StatusCode::NOT_FOUND).body(
         Full::new("NOT FOUND".into())
             .map_err(|e| match e {})
@@ -81,7 +82,7 @@ fn not_found() -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
     )?)
 }
 
-fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, anyhow::Error>>> {
     let reads = READS.lock().unwrap();
     let index_url = format!("/{}", Config::get().index_name);
     if url == index_url {
@@ -110,7 +111,7 @@ fn page_send(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
 
 fn index_send(
     reads: &HashMap<Locator, ThreadNodeType>,
-) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+) -> Result<Response<BoxBody<Bytes, anyhow::Error>>> {
     let index = render_index(reads)?;
     let json = serde_json::to_string(&index)?;
     let body = Full::new(json.into()).map_err(|e| match e {}).boxed();
@@ -122,13 +123,13 @@ fn index_send(
     Ok(response)
 }
 
-async fn event_stream(tx: Sender<Bytes>) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+async fn event_stream(tx: Sender<Bytes>) -> Result<Response<BoxBody<Bytes, anyhow::Error>>> {
     let rx2 = tx.subscribe();
     let stream = BroadcastStream::from(rx2);
 
     let reader_stream = stream
         .map_ok(hyper::body::Frame::data)
-        .map_err(|_item| panic!());
+        .map_err(|err| anyhow!("Failed to open reader stream: {err:}"));
 
     let stream = StreamBody::new(reader_stream);
     let boxed_body = stream.boxed();
@@ -141,7 +142,7 @@ async fn event_stream(tx: Sender<Bytes>) -> Result<Response<BoxBody<Bytes, std::
     Ok(response)
 }
 
-fn static_file_serve(url: &str) -> Result<Response<BoxBody<Bytes, std::io::Error>>> {
+fn static_file_serve(url: &str) -> Result<Response<BoxBody<Bytes, anyhow::Error>>> {
     let loc = Locator::from_url(url);
     let file = File::open(loc.static_path());
     if let Ok(mut file) = file {
