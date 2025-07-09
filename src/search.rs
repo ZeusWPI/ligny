@@ -10,13 +10,13 @@ use crate::{
 };
 
 #[derive(Serialize)]
-pub struct Page {
+pub struct SearchPage {
     html: String,
     url: String,
     title: String,
 }
 
-type Index = Vec<Page>;
+type Index = Vec<SearchPage>;
 
 pub fn render_index(reads: &HashMap<Locator, ThreadNodeType>) -> Result<Index> {
     let mut index = vec![];
@@ -26,7 +26,7 @@ pub fn render_index(reads: &HashMap<Locator, ThreadNodeType>) -> Result<Index> {
             ThreadNode::Page(page) => page.clone(),
         };
 
-        index.push(Page {
+        index.push(SearchPage {
             html: page.content.clone(),
             url: loc.url().clone(),
             title: page.title.clone(),
