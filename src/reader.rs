@@ -258,7 +258,7 @@ fn rewrite_links(blocks: &mut Vec<Block>, loc: &Locator) -> Result<Vec<Locator>>
                     if link.destination.contains(":") {
                         continue;
                     } // TODO make better
-                    let rewritten_loc = loc.join(&Locator::new(&link.destination));
+                    let rewritten_loc = loc.parent().join(&Locator::new(&link.destination));
                     link.destination = rewritten_loc.url();
                     internal_links.push(rewritten_loc);
                 }
