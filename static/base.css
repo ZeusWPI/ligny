@@ -125,3 +125,11 @@ header a {
         justify-self: left;
     }
 }
+
+h2::before {
+    content: "\0023\0020";
+}
+
+h3::before {
+    content: "\0023\0023\0020";
+}
