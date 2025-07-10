@@ -79,14 +79,21 @@ pub fn write_pages_to_files() -> Result<()> {
 
         let html = page.render(&root)?;
         create_dir_all(loc.public_dir()).with_context(|| {
-            format!("Failed to create all dirs for path: '{}'", loc.public_dir())
+            format!(
+                "Failed to create all dirs for path: '{}'",
+                loc.public_dir().display()
+            )
         })?;
 
         let mut file = File::create(loc.public_path())
-            .with_context(|| format!("Failed to create file: '{}'", loc.public_dir()))?;
+            .with_context(|| format!("Failed to create file: '{}'", loc.public_dir().display()))?;
 
-        file.write_all(html.as_bytes())
-            .with_context(|| format!("Failed to write html to file: '{}'", loc.public_dir()))?;
+        file.write_all(html.as_bytes()).with_context(|| {
+            format!(
+                "Failed to write html to file: '{}'",
+                loc.public_dir().display()
+            )
+        })?;
 
         println!(
             "Build page {} to {}",

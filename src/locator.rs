@@ -85,31 +85,34 @@ impl Locator {
     }
 
     pub fn url(&self) -> String {
-        let mut url = self
-            .components
+        let mut url = self.join_components();
+        url.insert(0, '/');
+        url
+    }
+
+    fn join_components(&self) -> String {
+        self.components
             .iter()
             .filter(|component| !component.eq(&"index"))
             .map(String::from)
             .collect::<Vec<String>>()
-            .join("/");
-        url.insert(0, '/');
-        url
+            .join("/")
     }
 
     pub fn public_path(&self) -> PathBuf {
         let path = Locator::new(&Config::get().public)
             .join(self)
             .join(&Locator::new("index.html"));
-        Path::new(&path.components.join("/")).to_path_buf()
+        PathBuf::from(path.join_components())
     }
 
-    pub fn public_dir(&self) -> String {
+    pub fn public_dir(&self) -> PathBuf {
         let path = Locator::new(&Config::get().public).join(self);
-        path.components.join("/")
+        PathBuf::from(path.join_components())
     }
 
     pub fn static_path(&self) -> PathBuf {
-        Config::get().static_dir.join(self.components.join("/"))
+        Config::get().static_dir.join(self.join_components())
     }
 }
 
