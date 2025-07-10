@@ -116,13 +116,15 @@ pub fn read(path: &Path, loc: &Locator, context: &mut Static) -> Result<ThreadSe
 
     let file_content = read_to_string(&index_path)
         .with_context(|| format!("Failed reading index file {index_path:?}"))?;
-    let (content, page_links) = markdown_to_html(file_content, &loc)
-        .with_context(|| format!("Failed converting markdown to HTML in file {index_path:?}"))?;
+    let (content, page_links) =
+        markdown_to_html(file_content, &loc.join(&Locator::new("index.html"))).with_context(
+            || format!("Failed converting markdown to HTML in file {index_path:?}"),
+        )?;
 
     // make section with index page
     let mut section = ThreadSection::new(Page {
         title: section_name.clone(),
-        loc: loc.clone(),
+        loc: loc.join(&Locator::new("index.md")),
         content,
         links: page_links,
     });
@@ -258,6 +260,7 @@ fn rewrite_links(blocks: &mut Vec<Block>, loc: &Locator) -> Result<Vec<Locator>>
                     if link.destination.contains(":") {
                         continue;
                     } // TODO make better
+
                     let rewritten_loc = loc.parent().join(&Locator::new(&link.destination));
                     link.destination = rewritten_loc.url();
                     internal_links.push(rewritten_loc);

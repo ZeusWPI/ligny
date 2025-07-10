@@ -1,10 +1,11 @@
 use std::fmt::Display;
+use std::hash::Hash;
 use std::path::Path;
 use std::{cmp::Eq, path::PathBuf};
 
 use crate::config::Config;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Locator {
     components: Vec<String>,
 }
@@ -16,12 +17,9 @@ impl Locator {
         let components = base
             .split("/")
             .map(String::from)
-            .filter(|c| !c.is_empty() && c != "index.md")
-            .map(|c| {
-                c.split_once('_')
-                    .map(|(_, e)| e.replace(".md", ""))
-                    .unwrap_or(c)
-            })
+            .filter(|c| !c.is_empty())
+            .map(|c| c.split_once('_').map(|(_, e)| String::from(e)).unwrap_or(c))
+            .map(|e| e.replace(".md", ""))
             .collect::<Vec<String>>();
 
         Locator { components }
@@ -42,16 +40,23 @@ impl Locator {
         let components: Vec<String> = stripped
             .iter()
             .filter_map(|component| component.to_str().map(String::from))
-            .filter(|c| !c.is_empty() && c != "index.md")
+            .filter(|c| !c.is_empty())
             .map(|c| {
                 c.split_once('_')
-                    .ok_or_else(|| {
-                        anyhow!(
-                            "Section or Filename does not contain an '_' separator: '{}'",
-                            c
-                        )
-                    })
-                    .map(|(_, e)| e.replace(".md", ""))
+                    .map_or_else(
+                        || {
+                            if c == "index.md" {
+                                Ok("index.md")
+                            } else {
+                                Err(anyhow!(
+                                    "Section or Filename does not contain an '_' separator: '{}'",
+                                    c
+                                ))
+                            }
+                        },
+                        |(_, e)| Ok(e),
+                    )
+                    .map(|e| e.replace(".md", ""))
             })
             .collect::<Result<Vec<String>>>()?;
         Ok(Locator { components })
@@ -80,7 +85,13 @@ impl Locator {
     }
 
     pub fn url(&self) -> String {
-        let mut url = self.components.join("/");
+        let mut url = self
+            .components
+            .iter()
+            .filter(|component| !component.eq(&"index"))
+            .map(String::from)
+            .collect::<Vec<String>>()
+            .join("/");
         url.insert(0, '/');
         url
     }
@@ -104,6 +115,21 @@ impl Locator {
 
 impl Display for Locator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.components.join("/"))
+        write!(f, "{}", self.url())
     }
 }
+
+impl Hash for Locator {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let url = self.url();
+        url.hash(state);
+    }
+}
+
+impl PartialEq for Locator {
+    fn eq(&self, other: &Self) -> bool {
+        self.url() == other.url()
+    }
+}
+
+impl Eq for Locator {}
