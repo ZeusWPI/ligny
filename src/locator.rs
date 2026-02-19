@@ -7,7 +7,7 @@ use crate::config::Config;
 
 #[derive(Clone, Debug)]
 pub struct Locator {
-    components: Vec<String>,
+    pub components: Vec<String>,
 }
 
 use anyhow::{Result, anyhow};
