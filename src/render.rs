@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use askama::Template;
 
 use crate::{
-    BESTUUR, CONTEXT,
+    PRIVATE_SECTION, CONTEXT,
     config::Config,
     locator::Locator,
     reader::{Node, Page, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
@@ -46,13 +46,13 @@ impl Page {
 }
 
 fn filter_private_sections(mut content_table: ContentTableTemplate) -> ContentTableTemplate {
-    if content_table.curr_page.loc.components[0] != BESTUUR {
+    if content_table.curr_page.loc.components[0] != PRIVATE_SECTION {
         content_table.pages = content_table
             .pages
             .iter()
             .filter(|p| {
                 let components = &p.loc.components;
-                !(components[0] == BESTUUR && components[1] != "index")
+                !(components[0] == PRIVATE_SECTION && components[1] != "index")
             })
             .map(|e| *e)
             .collect();
