@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use askama::Template;
 
 use crate::{
-    PRIVATE_SECTION, CONTEXT,
+    CONTEXT,
     config::Config,
     locator::Locator,
     reader::{Node, Page, Section, ThreadNode, ThreadNodeType, ThreadSection, read},
@@ -22,10 +22,10 @@ use crate::{
 impl Page {
     pub fn render(&self, root: &Section) -> Result<String> {
         let pages = flatten_sections(root);
-        let content_table = filter_private_sections(ContentTableTemplate {
+        let content_table = ContentTableTemplate {
             pages,
             curr_page: self,
-        });
+        }.filter_private_sections();
 
         let html = BaseTemplate {
             table: &content_table,
@@ -45,20 +45,6 @@ impl Page {
     }
 }
 
-fn filter_private_sections(mut content_table: ContentTableTemplate) -> ContentTableTemplate {
-    if content_table.curr_page.loc.components[0] != PRIVATE_SECTION {
-        content_table.pages = content_table
-            .pages
-            .iter()
-            .filter(|p| {
-                let components = &p.loc.components;
-                !(components[0] == PRIVATE_SECTION && components[1] != "index")
-            })
-            .map(|e| *e)
-            .collect();
-    }
-    content_table
-}
 
 fn flatten_sections(root: &Section) -> Vec<&Page> {
     let mut pages = Vec::new();
