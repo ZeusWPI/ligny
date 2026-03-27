@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 
 use crate::{
+    PRIVATE_SECTION,
     config::Config,
     locator::Locator,
     reader::{ThreadNode, ThreadNodeType},
@@ -21,6 +22,10 @@ type Index = Vec<SearchPage>;
 pub fn render_index(reads: &HashMap<Locator, ThreadNodeType>) -> Result<Index> {
     let mut index = vec![];
     for (loc, node) in reads.iter() {
+        let components = &loc.components;
+        if components.len() >= 2 && components[0] == PRIVATE_SECTION && components[1] != "index" {
+            continue;
+        }
         let page = match node.lock().unwrap().deref() {
             ThreadNode::Section(section) => section.body.clone(),
             ThreadNode::Page(page) => page.clone(),
