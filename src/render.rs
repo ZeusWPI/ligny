@@ -25,7 +25,7 @@ impl Page {
         let content_table = ContentTableTemplate {
             pages,
             curr_page: self,
-        };
+        }.filter_private_sections();
 
         let html = BaseTemplate {
             table: &content_table,
@@ -44,6 +44,7 @@ impl Page {
         Ok(html)
     }
 }
+
 
 fn flatten_sections(root: &Section) -> Vec<&Page> {
     let mut pages = Vec::new();

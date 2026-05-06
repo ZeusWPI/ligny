@@ -26,6 +26,7 @@ use serve::serve;
 use crate::init::init_files;
 
 static BUILD_COMMAND: &str = "build";
+const PRIVATE_SECTION: &str = "bestuur";
 
 pub struct Static {
     reads: HashMap<Locator, ThreadNodeType>,
